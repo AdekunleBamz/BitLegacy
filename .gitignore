@@ -1,0 +1,30 @@
+# deps
+node_modules/
+.pnp
+.pnp.js
+
+# next
+.next/
+out/
+build/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# clarinet
+.clarinet/
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+tmp/
+{contracts,src/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# vercel
+.vercel

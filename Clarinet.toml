@@ -1,0 +1,20 @@
+[project]
+name = "bitlegacy"
+description = "Bitcoin inheritance protocol on Stacks"
+authors = ["Bamzz <bamzzstudio@gmail.com>"]
+telemetry = false
+cache_location = "./.clarinet"
+
+[contracts.estate-vault]
+path = "contracts/estate-vault.clar"
+clarity_version = 4
+epoch = "3.3"
+
+[contracts.guardian]
+path = "contracts/guardian.clar"
+clarity_version = 4
+epoch = "3.3"
+
+[repl]
+costs_version = 2
+parser_version = 2
