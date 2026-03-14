@@ -1,20 +1,66 @@
 'use client'
 // src/app/page.tsx — Landing / hero
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useWallet } from '@/hooks/useWallet'
 import ConnectWallet from '@/components/ConnectWallet'
+import { getEstate } from '@/lib/stacks'
 
 export default function Home() {
   const { connected, address } = useWallet()
+  const [checkingEstate, setCheckingEstate] = useState(false)
+  const [hasEstate, setHasEstate] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkEstate() {
+      if (!connected || !address) {
+        setHasEstate(false)
+        setCheckingEstate(false)
+        return
+      }
+
+      setCheckingEstate(true)
+      try {
+        const estate = await getEstate(address)
+        if (!cancelled) {
+          setHasEstate(Boolean(estate))
+        }
+      } catch {
+        if (!cancelled) {
+          setHasEstate(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingEstate(false)
+        }
+      }
+    }
+
+    void checkEstate()
+
+    return () => {
+      cancelled = true
+    }
+  }, [connected, address])
 
   return (
     <main className="min-h-screen flex flex-col">
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-[#1a1a1a]">
-        <span className="font-bold text-lg tracking-tight">
-          <span className="text-[#f7931a]">Bit</span>Legacy
-        </span>
+        <Link href="/" className="inline-flex items-center" aria-label="BitLegacy home">
+          <Image
+            src="/logo-wordmark.svg"
+            alt="BitLegacy"
+            width={240}
+            height={54}
+            priority
+            className="h-9 w-auto sm:h-10"
+          />
+        </Link>
         <ConnectWallet />
       </nav>
 
@@ -36,15 +82,20 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
-          <Link href="/dashboard" className="btn-primary text-base px-8 py-4 rounded-2xl">
-            Open Dashboard →
-          </Link>
-          {connected ? (
+          {!connected ? (
+            <ConnectWallet cta="Connect to Create Estate" large />
+          ) : checkingEstate ? (
+            <button disabled className="btn-secondary text-base px-8 py-4 rounded-2xl">
+              Checking estate…
+            </button>
+          ) : hasEstate ? (
+            <Link href="/dashboard" className="btn-primary text-base px-8 py-4 rounded-2xl">
+              Open Dashboard →
+            </Link>
+          ) : (
             <Link href="/create" className="btn-secondary text-base px-8 py-4 rounded-2xl">
               Create Your Estate
             </Link>
-          ) : (
-            <ConnectWallet cta="Connect to Create Estate" large />
           )}
           <Link href="/claim" className="btn-secondary text-base px-8 py-4 rounded-2xl">
             I&apos;m a Beneficiary

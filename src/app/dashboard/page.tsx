@@ -43,6 +43,10 @@ export default function Dashboard() {
   const [pinging, setPinging] = useState(false)
   const [repairingWindow, setRepairingWindow] = useState(false)
   const [txResult, setTxResult] = useState<string | null>(null)
+  const legacyWindowDetected =
+    windowValue !== null &&
+    isLegacyWindowValue(windowValue) &&
+    !isCvTrue(estate?.['triggered']?.value)
 
   useEffect(() => {
     if (!connected || !address) return
@@ -74,7 +78,7 @@ export default function Dashboard() {
     return new Promise<any>((resolve, reject) => {
       void openContractCall({
         ...tx,
-        appDetails: { name: 'BitLegacy', icon: '/logo.png' },
+        appDetails: { name: 'BitLegacy', icon: '/logo.svg' },
         onFinish: data => resolve(data),
         onCancel: () => reject(new Error('Transaction cancelled')),
       })
@@ -102,13 +106,18 @@ export default function Dashboard() {
     const correctedWindowSeconds = windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS
     setRepairingWindow(true)
     try {
-      const tx = await buildUpdateEstateTx({
+      const updateTx = await buildUpdateEstateTx({
         newWindowSeconds: correctedWindowSeconds,
         ipfsCid: getIpfsCidFromEstate(estate),
         senderAddress: address,
       })
-      const result = await openWalletTx(tx)
-      setTxResult(result.txId)
+      const updateResult = await openWalletTx(updateTx)
+      setTxResult(updateResult.txId)
+
+      const proofTx = await buildProofOfLifeTx(address)
+      const proofResult = await openWalletTx(proofTx)
+      setTxResult(proofResult.txId)
+
       setTimeout(load, 3000)
     } catch (e: any) {
       console.error(e)
@@ -196,25 +205,26 @@ export default function Dashboard() {
             )}
 
             {/* Legacy window repair */}
-            {windowValue !== null && isLegacyWindowValue(windowValue) && !isCvTrue(estate['triggered']?.value) && (
+            {legacyWindowDetected && (
               <div className="bg-orange-950/40 border border-orange-800 rounded-xl p-4 mb-4">
                 <p className="text-sm text-orange-300 font-semibold">Legacy window format detected</p>
                 <p className="text-xs text-orange-200 mt-1">
                   This estate was created with an older block-based window value ({windowValue}), which now behaves like {windowValue} seconds.
-                  Repairing sets it to {windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS} seconds (~{blocksToHuman(windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS)}).
+                  Repairing sets it to {windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS} seconds (~{blocksToHuman(windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS)}),
+                  then immediately resets the countdown.
                 </p>
                 <button
                   onClick={handleRepairLegacyWindow}
                   disabled={repairingWindow}
                   className="btn-secondary w-full mt-3"
                 >
-                  {repairingWindow ? 'Repairing window…' : 'Repair Window to Seconds'}
+                  {repairingWindow ? 'Repairing + Resetting…' : 'Repair Window + Reset Countdown'}
                 </button>
               </div>
             )}
 
             {/* Proof of life button */}
-            {!isCvTrue(estate['triggered']?.value) && (
+            {!isCvTrue(estate['triggered']?.value) && !legacyWindowDetected && (
               <button
                 onClick={handleProofOfLife}
                 disabled={pinging}

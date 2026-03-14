@@ -1,0 +1,25 @@
+<svg width="980" height="220" viewBox="0 0 980 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">BitLegacy Wordmark</title>
+  <desc id="desc">BitLegacy brand wordmark with modern Bitcoin-inspired symbol.</desc>
+  <defs>
+    <linearGradient id="bg" x1="18" y1="14" x2="202" y2="202" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1C1308"/>
+      <stop offset="1" stop-color="#0C0C0C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="52" y1="42" x2="167" y2="177" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD089"/>
+      <stop offset="0.45" stop-color="#F7931A"/>
+      <stop offset="1" stop-color="#C26A05"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="14" y="14" width="192" height="192" rx="44" fill="url(#bg)"/>
+  <rect x="14" y="14" width="192" height="192" rx="44" stroke="#302414" stroke-width="4"/>
+  <circle cx="110" cy="110" r="63" stroke="url(#accent)" stroke-width="8" fill="none"/>
+  <path d="M84 58H121C140 58 153 69 153 85C153 96 147 105 137 109C149 113 157 123 157 136C157 155 142 166 121 166H84V58ZM108 80V99H120C129 99 134 95 134 89C134 83 129 80 120 80H108ZM108 118V143H123C132 143 138 138 138 131C138 123 132 118 123 118H108Z" fill="url(#accent)"/>
+  <rect x="98" y="48" width="8" height="124" rx="4" fill="#F5A63D"/>
+
+  <text x="246" y="134" fill="#F6F6F6" font-size="96" font-weight="700" font-family="'Avenir Next', Avenir, 'Segoe UI', Helvetica, Arial, sans-serif" letter-spacing="-1.5">Bit</text>
+  <text x="392" y="134" fill="#F7931A" font-size="96" font-weight="700" font-family="'Avenir Next', Avenir, 'Segoe UI', Helvetica, Arial, sans-serif" letter-spacing="-1.5">Legacy</text>
+  <text x="248" y="175" fill="#9A9A9A" font-size="26" font-weight="500" font-family="'Avenir Next', Avenir, 'Segoe UI', Helvetica, Arial, sans-serif" letter-spacing="2.2">BITCOIN INHERITANCE PROTOCOL</text>
+</svg>

@@ -59,7 +59,7 @@ export default function CreateEstate() {
     return new Promise<any>((resolve, reject) => {
       void openContractCall({
         ...tx,
-        appDetails: { name: 'BitLegacy', icon: '/logo.png' },
+        appDetails: { name: 'BitLegacy', icon: '/logo.svg' },
         onFinish: data => resolve(data),
         onCancel: () => reject(new Error('Transaction cancelled')),
       })
