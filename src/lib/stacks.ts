@@ -283,6 +283,29 @@ export async function buildRegisterGuardiansTx({
   })
 }
 
+export async function buildUpdateEstateTx({
+  newWindowSeconds,
+  ipfsCid,
+  senderAddress,
+}: {
+  newWindowSeconds?: number
+  ipfsCid?: string
+  senderAddress: string
+}) {
+  return createContractCallOptions({
+    contractId: ESTATE_VAULT_CONTRACT,
+    functionName: 'update-estate',
+    functionArgs: [
+      typeof newWindowSeconds === 'number' && newWindowSeconds > 0
+        ? someCV(uintCV(newWindowSeconds))
+        : noneCV(),
+      ipfsCid ? someCV(stringAsciiCV(ipfsCid)) : noneCV(),
+    ],
+    fee: 1000,
+    stxAddress: senderAddress,
+  })
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 export function satoshiToSBTC(sats: number): number {

@@ -11,11 +11,26 @@ import {
   getTimeRemaining,
   getGuardianPanel,
   buildProofOfLifeTx,
+  buildUpdateEstateTx,
   blocksToHuman,
   isCvTrue,
   satoshiToSBTC,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
+
+const LEGACY_WINDOW_BLOCK_TO_SECONDS = 600
+const LEGACY_WINDOW_VALUES = new Set([
+  12, 36, 72, 144, 1008, 2016, 4320, 8640, 12960, 25920, 52560, 105120,
+])
+
+function isLegacyWindowValue(windowValue: number): boolean {
+  return LEGACY_WINDOW_VALUES.has(windowValue)
+}
+
+function getIpfsCidFromEstate(estate: any): string | undefined {
+  const raw = estate?.['ipfs-cid']?.value
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined
+}
 
 export default function Dashboard() {
   const { connected, address } = useWallet()
@@ -23,8 +38,10 @@ export default function Dashboard() {
   const [estate, setEstate] = useState<any>(null)
   const [guardianPanel, setGuardianPanel] = useState<any>(null)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  const [windowValue, setWindowValue] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [pinging, setPinging] = useState(false)
+  const [repairingWindow, setRepairingWindow] = useState(false)
   const [txResult, setTxResult] = useState<string | null>(null)
 
   useEffect(() => {
@@ -41,6 +58,7 @@ export default function Dashboard() {
     try {
       const [e, t] = await Promise.all([getEstate(address), getTimeRemaining(address)])
       setEstate(e)
+      setWindowValue(Number(e?.['window-blocks']?.value || 0))
       if (isCvTrue(e?.['guardian-required']?.value)) {
         const panel = await getGuardianPanel(address)
         setGuardianPanel(panel ?? null)
@@ -75,6 +93,27 @@ export default function Dashboard() {
       console.error(e)
     }
     setPinging(false)
+  }
+
+  async function handleRepairLegacyWindow() {
+    if (!address || !estate || !windowValue) return
+    if (!isLegacyWindowValue(windowValue)) return
+
+    const correctedWindowSeconds = windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS
+    setRepairingWindow(true)
+    try {
+      const tx = await buildUpdateEstateTx({
+        newWindowSeconds: correctedWindowSeconds,
+        ipfsCid: getIpfsCidFromEstate(estate),
+        senderAddress: address,
+      })
+      const result = await openWalletTx(tx)
+      setTxResult(result.txId)
+      setTimeout(load, 3000)
+    } catch (e: any) {
+      console.error(e)
+    }
+    setRepairingWindow(false)
   }
 
   if (!connected) {
@@ -153,6 +192,24 @@ export default function Dashboard() {
                 <p className="text-xs text-neutral-500 mt-1">
                   ~{timeLeft} second{timeLeft === 1 ? '' : 's'} remaining
                 </p>
+              </div>
+            )}
+
+            {/* Legacy window repair */}
+            {windowValue !== null && isLegacyWindowValue(windowValue) && !isCvTrue(estate['triggered']?.value) && (
+              <div className="bg-orange-950/40 border border-orange-800 rounded-xl p-4 mb-4">
+                <p className="text-sm text-orange-300 font-semibold">Legacy window format detected</p>
+                <p className="text-xs text-orange-200 mt-1">
+                  This estate was created with an older block-based window value ({windowValue}), which now behaves like {windowValue} seconds.
+                  Repairing sets it to {windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS} seconds (~{blocksToHuman(windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS)}).
+                </p>
+                <button
+                  onClick={handleRepairLegacyWindow}
+                  disabled={repairingWindow}
+                  className="btn-secondary w-full mt-3"
+                >
+                  {repairingWindow ? 'Repairing window…' : 'Repair Window to Seconds'}
+                </button>
               </div>
             )}
 

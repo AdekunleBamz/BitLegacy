@@ -67,8 +67,8 @@ bitlegacy/
 │   └── guardian.clar
 ├── settings/
 │   ├── Devnet.toml
-│   ├── Testnet.toml
-│   └── Mainnet.toml
+│   ├── Testnet.example.toml
+│   └── Mainnet.example.toml
 ├── scripts/
 │   └── verify-testnet-deploy.sh
 ├── src/
@@ -96,6 +96,8 @@ git clone https://github.com/AdekunleBamz/BitLegacy
 cd bitlegacy
 npm install
 cp .env.example .env.local
+cp settings/Testnet.example.toml settings/Testnet.toml
+cp settings/Mainnet.example.toml settings/Mainnet.toml
 ```
 
 Update `.env.local` with your contract address and preferred x402 settings.
