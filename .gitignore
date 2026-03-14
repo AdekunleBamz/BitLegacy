@@ -5,6 +5,7 @@ node_modules/
 
 # next
 .next/
+.next_corrupt_*/
 out/
 build/
 dist/

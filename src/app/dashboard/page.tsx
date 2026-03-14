@@ -252,6 +252,16 @@ export default function Dashboard() {
             )}
           </div>
 
+          <div className="card">
+            <p className="label mb-2">Need another estate?</p>
+            <p className="text-sm text-neutral-400">
+              One estate is allowed per wallet address. To create a separate estate, switch to a different wallet.
+            </p>
+            <Link href="/create" className="btn-secondary w-full mt-3 text-center">
+              Create Separate Estate →
+            </Link>
+          </div>
+
           {/* Beneficiaries */}
           <div className="card">
             <p className="label mb-3">Beneficiaries</p>
