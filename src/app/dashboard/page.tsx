@@ -188,7 +188,7 @@ export default function Dashboard() {
             </div>
 
             {/* Countdown */}
-            {timeLeft !== null && !isCvTrue(estate['triggered']?.value) && (
+            {timeLeft !== null && !isCvTrue(estate['triggered']?.value) && !legacyWindowDetected && (
               <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
                 <p className="label">Time until estate can trigger</p>
                 <p className="text-xl font-semibold">
@@ -212,6 +212,9 @@ export default function Dashboard() {
                   This estate was created with an older block-based window value ({windowValue}), which now behaves like {windowValue} seconds.
                   Repairing sets it to {windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS} seconds (~{blocksToHuman(windowValue * LEGACY_WINDOW_BLOCK_TO_SECONDS)}),
                   then immediately resets the countdown.
+                </p>
+                <p className="text-xs text-orange-200 mt-2">
+                  Countdown display is hidden until this migration runs, to avoid showing a misleading expired state.
                 </p>
                 <button
                   onClick={handleRepairLegacyWindow}
