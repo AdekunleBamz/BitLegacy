@@ -15,7 +15,7 @@ import {
   type WalletContractCallOptions,
 } from '@/lib/stacks'
 import { uploadWillToIPFS, type WillDocument } from '@/lib/ipfs'
-import { WINDOW_OPTIONS } from '@/constants/contracts'
+import { DEFAULT_WINDOW_BLOCKS, WINDOW_OPTIONS } from '@/constants/contracts'
 
 const EMPTY_BENE: Beneficiary = { addr: '', share_pct: 0, label: '' }
 
@@ -23,7 +23,7 @@ export default function CreateEstate() {
   const { connected, address } = useWallet()
 
   const [amount, setAmount] = useState('')
-  const [window, setWindow] = useState(WINDOW_OPTIONS[2].blocks) // 30 days default
+  const [window, setWindow] = useState(DEFAULT_WINDOW_BLOCKS) // 30 days default
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([{ ...EMPTY_BENE }])
   const [guardianRequired, setGuardianRequired] = useState(false)
   const [g1, setG1] = useState('')
@@ -38,6 +38,7 @@ export default function CreateEstate() {
   const [step, setStep] = useState(1) // 1=estate, 2=will, 3=confirm
 
   const totalPct = beneficiaries.reduce((a, b) => a + (Number(b.share_pct) || 0), 0)
+  const isSubmittingLocked = submitting || uploading
 
   function addBeneficiary() {
     if (beneficiaries.length >= 5) return
@@ -79,7 +80,7 @@ export default function CreateEstate() {
     try {
       if (guardianRequired) {
         const existingPanel = await getGuardianPanel(address)
-        if (!existingPanel?.value) {
+        if (!existingPanel) {
           const guardianTx = await buildRegisterGuardiansTx({
             estateOwner: address,
             g1,
@@ -375,11 +376,17 @@ export default function CreateEstate() {
             </div>
           )}
 
+          {totalPct !== 100 && (
+            <div className="bg-orange-950 border border-orange-800 rounded-xl px-4 py-3 text-orange-300 text-sm">
+              Beneficiary shares are currently {totalPct}%. Set them to exactly 100% before creating the estate.
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={() => setStep(2)} className="btn-secondary flex-1">← Back</button>
             <button
               onClick={handleSubmit}
-              disabled={submitting || uploading || totalPct !== 100}
+              disabled={isSubmittingLocked}
               className="btn-primary flex-1"
             >
               {uploading ? 'Uploading will…' : submitting ? 'Confirm in wallet…' : 'Create Estate →'}

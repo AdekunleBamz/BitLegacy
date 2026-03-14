@@ -36,12 +36,15 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
+          <Link href="/dashboard" className="btn-primary text-base px-8 py-4 rounded-2xl">
+            Open Dashboard →
+          </Link>
           {connected ? (
-            <Link href="/dashboard" className="btn-primary text-base px-8 py-4 rounded-2xl">
-              Open Dashboard →
+            <Link href="/create" className="btn-secondary text-base px-8 py-4 rounded-2xl">
+              Create Your Estate
             </Link>
           ) : (
-            <ConnectWallet cta="Create Your Estate" large />
+            <ConnectWallet cta="Connect to Create Estate" large />
           )}
           <Link href="/claim" className="btn-secondary text-base px-8 py-4 rounded-2xl">
             I&apos;m a Beneficiary

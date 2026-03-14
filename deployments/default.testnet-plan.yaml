@@ -1,0 +1,25 @@
+---
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: "https://api.testnet.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: estate-vault
+            expected-sender: ST5K2RHMSBH4PAP4PGX77MCVNK1ZEED07EH98W0P
+            cost: 92820
+            path: contracts/estate-vault.clar
+            anchor-block-only: true
+            clarity-version: 4
+        - contract-publish:
+            contract-name: guardian
+            expected-sender: ST5K2RHMSBH4PAP4PGX77MCVNK1ZEED07EH98W0P
+            cost: 34710
+            path: contracts/guardian.clar
+            anchor-block-only: true
+            clarity-version: 4
+      epoch: "3.3"

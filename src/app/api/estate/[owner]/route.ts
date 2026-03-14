@@ -1,13 +1,39 @@
 // src/app/api/estate/[owner]/route.ts
-// x402-gated API endpoint — returns estate data after payment verification
+// x402-gated API endpoint - returns estate data after payment verification
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cvToJSON, deserializeCV, serializeCV, standardPrincipalCV } from '@stacks/transactions'
-import { build402Response, verifyX402Payment } from '@/lib/x402'
-import { CONTRACT_ADDRESS } from '@/constants/contracts'
+import {
+  build402Response,
+  buildPaymentRequiredHeader,
+  buildPaymentResponseHeader,
+  verifyX402Payment,
+} from '@/lib/x402'
+import { CONTRACT_ADDRESS, NETWORK } from '@/constants/contracts'
 
 function encodeClarityPrincipal(address: string) {
   return `0x${Buffer.from(serializeCV(standardPrincipalCV(address))).toString('hex')}`
+}
+
+function unwrapOptionalTuple(json: any) {
+  if (!json || json.value === null) return null
+  const inner = json.value
+  if (inner && typeof inner === 'object' && inner.value && typeof inner.value === 'object') {
+    return inner.value
+  }
+  return inner
+}
+
+function isCvTrue(value: unknown): boolean {
+  return value === true || value === 'true'
+}
+
+function corsHeaders(extraHeaders: Record<string, string> = {}) {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Expose-Headers': 'payment-required, payment-response',
+    ...extraHeaders,
+  }
 }
 
 export async function GET(
@@ -16,36 +42,42 @@ export async function GET(
 ) {
   const { owner } = params
   const resource = `/api/estate/${owner}`
+  const paymentRequired = build402Response(resource)
+  const paymentSignature = req.headers.get('payment-signature')
 
-  // Check for X-PAYMENT header
-  const xPayment = req.headers.get('X-PAYMENT')
-
-  if (!xPayment) {
-    // Return 402 Payment Required
-    const paymentRequired = build402Response(resource, CONTRACT_ADDRESS)
-    return NextResponse.json(paymentRequired, {
-      status: 402,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-PAYMENT-RESPONSE',
+  if (!paymentSignature) {
+    return NextResponse.json(
+      {
+        error: 'Payment required',
+        paymentRequired,
       },
-    })
+      {
+        status: 402,
+        headers: corsHeaders({
+          'payment-required': buildPaymentRequiredHeader(paymentRequired),
+        }),
+      }
+    )
   }
 
-  // Verify the payment (in production — for demo, we allow after any payment header)
-  const { valid, txid, error } = await verifyX402Payment(xPayment, resource)
+  const { valid, txid, payer, error, simulated } = await verifyX402Payment(paymentSignature, resource)
 
   if (!valid) {
-    // Demo mode: allow through if payment header is present but facilitator not set up
-    const isDemo = process.env.NEXT_PUBLIC_X402_DEMO === 'true'
-    if (!isDemo) {
-      return NextResponse.json({ error: `Payment invalid: ${error}` }, { status: 402 })
-    }
+    return NextResponse.json(
+      {
+        error: `Payment invalid: ${error}`,
+        paymentRequired,
+      },
+      {
+        status: 402,
+        headers: corsHeaders({
+          'payment-required': buildPaymentRequiredHeader(paymentRequired),
+        }),
+      }
+    )
   }
 
-  // Payment verified — fetch estate data from Stacks API
-  const network = process.env.NEXT_PUBLIC_NETWORK || 'testnet'
-  const apiBase = network === 'mainnet'
+  const apiBase = NETWORK === 'mainnet'
     ? 'https://api.hiro.so'
     : 'https://api.testnet.hiro.so'
 
@@ -64,7 +96,6 @@ export async function GET(
       }
     )
 
-    // Also check trigger status
     const triggerRes = await fetch(
       `${apiBase}/v2/contracts/call-read/${CONTRACT_ADDRESS}/estate-vault/is-triggered`,
       {
@@ -81,19 +112,28 @@ export async function GET(
     const triggerData = triggerRes.ok ? await triggerRes.json() : null
     const estateJson = estateData?.result ? cvToJSON(deserializeCV(estateData.result)) : null
     const triggerJson = triggerData?.result ? cvToJSON(deserializeCV(triggerData.result)) : null
+    const estate = unwrapOptionalTuple(estateJson)
 
     return NextResponse.json(
       {
-        estate: estateJson?.value ?? null,
-        triggered: triggerJson?.value?.value === 'true',
-        paymentTxid: txid,
+        estate,
+        triggered: isCvTrue(triggerJson?.value?.value),
+        payment: {
+          txid,
+          payer,
+          simulated: Boolean(simulated),
+        },
       },
       {
-        headers: {
-          'X-PAYMENT-RESPONSE': JSON.stringify({ success: true, txid }),
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Expose-Headers': 'X-PAYMENT-RESPONSE',
-        },
+        headers: corsHeaders({
+          'payment-response': buildPaymentResponseHeader({
+            success: true,
+            payer,
+            transaction: txid,
+            network: paymentRequired.paymentRequirements.network,
+            simulated,
+          }),
+        }),
       }
     )
   } catch (err: any) {
@@ -107,8 +147,8 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-PAYMENT',
-      'Access-Control-Expose-Headers': 'X-PAYMENT-RESPONSE',
+      'Access-Control-Allow-Headers': 'Content-Type, payment-signature',
+      'Access-Control-Expose-Headers': 'payment-required, payment-response',
     },
   })
 }

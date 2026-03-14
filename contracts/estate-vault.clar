@@ -16,8 +16,8 @@
 (define-constant ERR-GUARDIAN-REQUIRED (err u110))
 
 ;; ===== CONSTANTS =====
-(define-constant BLOCKS-PER-DAY u144)
-(define-constant DEFAULT-WINDOW (* BLOCKS-PER-DAY u30)) ;; 30 days
+(define-constant SECONDS-PER-DAY u86400)
+(define-constant DEFAULT-WINDOW (* SECONDS-PER-DAY u30)) ;; 30 days
 (define-constant CONTRACT-OWNER tx-sender)
 (define-constant ESTATE-VAULT .estate-vault)
 (define-constant PLATFORM-FEE-BPS u50) ;; 0.5%

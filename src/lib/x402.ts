@@ -1,162 +1,338 @@
 // src/lib/x402.ts
-// x402 HTTP payment protocol integration for BitLegacy
-// Used to gate heir verification API calls behind USDCx micropayments
-// This is the "Best x402 Integration" bounty target
+// Stacks-native x402 V2 helpers for BitLegacy
 
-import { X402_ENDPOINT, X402_PRICE_USDCX } from '@/constants/contracts'
+import {
+  NETWORK,
+  SBTC_CONTRACT,
+  X402_ASSET,
+  X402_CAIP2_NETWORK,
+  X402_DEMO_MODE,
+  X402_FACILITATOR_URL,
+  X402_PAY_TO_ADDRESS,
+  X402_PRICE_MICRO,
+  type X402Asset,
+} from '@/constants/contracts'
 
-export interface X402PaymentRequired {
+const X402_VERSION = 2 as const
+
+export interface X402PaymentRequirements {
   scheme: 'exact'
-  network: 'stacks-mainnet' | 'stacks-testnet'
-  maxAmountRequired: string
+  network: string
+  amount: string
+  asset: X402Asset
+  payTo: string
+  maxTimeoutSeconds: number
   resource: string
   description: string
   mimeType: string
-  payTo: string
-  requiredDeadlineSeconds: number
-  extra: {
-    name: string
-    version: string
-  }
+  tokenContract?: string
+}
+
+export interface X402PaymentRequired {
+  x402Version: typeof X402_VERSION
+  paymentRequirements: X402PaymentRequirements
 }
 
 export interface X402PaymentPayload {
-  scheme: 'exact'
-  network: string
-  payload: string      // base64-encoded signed tx
-  resource: string
+  x402Version: typeof X402_VERSION
+  payload: {
+    transaction: string
+  }
+  accepted: X402PaymentRequirements
 }
 
-// ─── Client-side x402 flow ────────────────────────────────────────────────────
+export interface X402PaymentResponse {
+  success: boolean
+  payer?: string
+  transaction?: string
+  network?: string
+  error?: string
+  simulated?: boolean
+}
 
-/**
- * Fetches a resource that requires x402 payment.
- * On 402 response, constructs and broadcasts the payment, then retries.
- */
+interface FacilitatorSettlementResponse {
+  success?: boolean
+  payer?: string
+  transaction?: string
+  txid?: string
+  network?: string
+  error?: string
+}
+
+function encodeBase64(value: string): string {
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    return window.btoa(value)
+  }
+
+  return Buffer.from(value, 'utf8').toString('base64')
+}
+
+function decodeBase64(value: string): string {
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    return window.atob(value)
+  }
+
+  return Buffer.from(value, 'base64').toString('utf8')
+}
+
+function parseJsonValue<T>(value: string): T {
+  return JSON.parse(value) as T
+}
+
+function decodeHeaderValue<T>(value: string): T {
+  try {
+    return parseJsonValue<T>(value)
+  } catch {
+    return parseJsonValue<T>(decodeBase64(value))
+  }
+}
+
+function toHeaders(headers?: HeadersInit): Headers {
+  return new Headers(headers)
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  const normalizedBase = baseUrl.replace(/\/+$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${normalizedBase}${normalizedPath}`
+}
+
+function getX402TokenContract(): string | undefined {
+  return X402_ASSET === 'sBTC' ? SBTC_CONTRACT : undefined
+}
+
+function formatWithDecimals(amount: string, decimals: number): string {
+  const value = BigInt(amount)
+  const divisor = BigInt(10) ** BigInt(decimals)
+  const whole = value / divisor
+  const fraction = value % divisor
+
+  if (fraction === BigInt(0)) {
+    return whole.toString()
+  }
+
+  return `${whole.toString()}.${fraction
+    .toString()
+    .padStart(decimals, '0')
+    .replace(/0+$/, '')}`
+}
+
+export function formatX402Amount(amount: string, asset: X402Asset = X402_ASSET): string {
+  return formatWithDecimals(amount, asset === 'sBTC' ? 8 : 6)
+}
+
+export function getX402PriceLabel(): string {
+  return `${formatX402Amount(X402_PRICE_MICRO, X402_ASSET)} ${X402_ASSET}`
+}
+
+export function build402Response(resource: string, payTo: string = X402_PAY_TO_ADDRESS): X402PaymentRequired {
+  return {
+    x402Version: X402_VERSION,
+    paymentRequirements: {
+      scheme: 'exact',
+      network: X402_CAIP2_NETWORK,
+      amount: X402_PRICE_MICRO,
+      asset: X402_ASSET,
+      payTo,
+      maxTimeoutSeconds: 300,
+      resource,
+      description: `BitLegacy estate lookup on ${NETWORK} - pay ${getX402PriceLabel()} to unlock the response`,
+      mimeType: 'application/json',
+      tokenContract: getX402TokenContract(),
+    },
+  }
+}
+
+export function buildPaymentRequiredHeader(paymentRequired: X402PaymentRequired): string {
+  return encodeBase64(JSON.stringify(paymentRequired))
+}
+
+export function buildPaymentResponseHeader(paymentResponse: X402PaymentResponse): string {
+  return encodeBase64(JSON.stringify(paymentResponse))
+}
+
+export function parsePaymentResponse(response: Response): X402PaymentResponse | null {
+  const header = response.headers.get('payment-response')
+  if (!header) {
+    return null
+  }
+
+  return decodeHeaderValue<X402PaymentResponse>(header)
+}
+
+export function buildPaymentPayload(
+  paymentRequired: X402PaymentRequired,
+  signedTransaction: string
+): X402PaymentPayload {
+  return {
+    x402Version: X402_VERSION,
+    payload: {
+      transaction: signedTransaction,
+    },
+    accepted: paymentRequired.paymentRequirements,
+  }
+}
+
+export function buildDemoSignedTransaction(
+  paymentRequired: X402PaymentRequired,
+  payerAddress?: string
+): string {
+  const payload = JSON.stringify({
+    demo: true,
+    payer: payerAddress || 'demo-payer',
+    network: paymentRequired.paymentRequirements.network,
+    asset: paymentRequired.paymentRequirements.asset,
+    amount: paymentRequired.paymentRequirements.amount,
+    resource: paymentRequired.paymentRequirements.resource,
+    timestamp: Date.now(),
+  })
+
+  return `0x${Array.from(new TextEncoder().encode(payload))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+async function readPaymentRequired(response: Response): Promise<X402PaymentRequired> {
+  const header = response.headers.get('payment-required')
+  if (header) {
+    return decodeHeaderValue<X402PaymentRequired>(header)
+  }
+
+  const body = await response.json()
+
+  if (body?.paymentRequired) {
+    return body.paymentRequired as X402PaymentRequired
+  }
+
+  if (body?.x402Version === X402_VERSION && body?.paymentRequirements) {
+    return body as X402PaymentRequired
+  }
+
+  throw new Error('Missing payment requirements in 402 response')
+}
+
 export async function x402Fetch(
   url: string,
   options: RequestInit = {},
   paymentSigner: (paymentRequired: X402PaymentRequired) => Promise<string>
 ): Promise<Response> {
-  // First attempt — no payment header
   const firstResponse = await fetch(url, options)
 
   if (firstResponse.status !== 402) {
     return firstResponse
   }
 
-  // Parse the 402 payment requirements
-  const paymentRequired: X402PaymentRequired = await firstResponse.json()
+  const paymentRequired = await readPaymentRequired(firstResponse)
+  const signedTransaction = await paymentSigner(paymentRequired)
+  const paymentPayload = buildPaymentPayload(paymentRequired, signedTransaction)
+  const headers = toHeaders(options.headers)
 
-  // Ask the wallet/signer to authorize payment
-  const signedPayload = await paymentSigner(paymentRequired)
+  headers.set('payment-signature', encodeBase64(JSON.stringify(paymentPayload)))
 
-  const paymentHeader: X402PaymentPayload = {
-    scheme: 'exact',
-    network: paymentRequired.network,
-    payload: signedPayload,
-    resource: paymentRequired.resource,
-  }
-
-  // Retry with X-PAYMENT header
-  const paidResponse = await fetch(url, {
+  return fetch(url, {
     ...options,
-    headers: {
-      ...(options.headers || {}),
-      'X-PAYMENT': btoa(JSON.stringify(paymentHeader)),
-    },
+    headers,
   })
-
-  return paidResponse
 }
 
-/**
- * Builds the X-PAYMENT-RESPONSE header value from a facilitator response.
- */
-export function parsePaymentResponse(response: Response): string | null {
-  return response.headers.get('X-PAYMENT-RESPONSE')
-}
-
-// ─── Server-side x402 middleware helpers ─────────────────────────────────────
-
-/**
- * Standard 402 response body for BitLegacy API routes.
- * Heirs pay $0.01 USDCx to hit verification endpoints.
- */
-export function build402Response(resource: string, payTo: string): X402PaymentRequired {
-  return {
-    scheme: 'exact',
-    network: (process.env.NEXT_PUBLIC_NETWORK === 'mainnet'
-      ? 'stacks-mainnet'
-      : 'stacks-testnet') as 'stacks-mainnet' | 'stacks-testnet',
-    maxAmountRequired: X402_PRICE_USDCX,
-    resource,
-    description: `BitLegacy heir verification — pay ${X402_PRICE_USDCX} USDCx to verify your identity`,
-    mimeType: 'application/json',
-    payTo,
-    requiredDeadlineSeconds: 60,
-    extra: {
-      name: 'BitLegacy',
-      version: '1.0.0',
-    },
-  }
-}
-
-/**
- * Verifies an x402 payment header against the facilitator.
- * Returns true if payment is valid and settled.
- */
-export async function verifyX402Payment(
-  xPaymentHeader: string,
+function validatePaymentPayload(
+  paymentPayload: X402PaymentPayload,
   expectedResource: string
-): Promise<{ valid: boolean; txid?: string; error?: string }> {
-  try {
-    const payment: X402PaymentPayload = JSON.parse(atob(xPaymentHeader))
+): { valid: boolean; error?: string } {
+  const { accepted, payload } = paymentPayload
 
-    if (payment.resource !== expectedResource) {
-      return { valid: false, error: 'Resource mismatch' }
+  if (paymentPayload.x402Version !== X402_VERSION) {
+    return { valid: false, error: 'Unsupported x402 version' }
+  }
+
+  if (!payload?.transaction) {
+    return { valid: false, error: 'Missing signed transaction payload' }
+  }
+
+  if (accepted.scheme !== 'exact') {
+    return { valid: false, error: 'Unsupported payment scheme' }
+  }
+
+  if (accepted.network !== X402_CAIP2_NETWORK) {
+    return { valid: false, error: 'Network mismatch' }
+  }
+
+  if (accepted.amount !== X402_PRICE_MICRO) {
+    return { valid: false, error: 'Amount mismatch' }
+  }
+
+  if (accepted.asset !== X402_ASSET) {
+    return { valid: false, error: 'Asset mismatch' }
+  }
+
+  if (accepted.payTo !== X402_PAY_TO_ADDRESS) {
+    return { valid: false, error: 'Recipient mismatch' }
+  }
+
+  if (accepted.resource !== expectedResource) {
+    return { valid: false, error: 'Resource mismatch' }
+  }
+
+  if (accepted.asset === 'sBTC' && accepted.tokenContract !== SBTC_CONTRACT) {
+    return { valid: false, error: 'Token contract mismatch' }
+  }
+
+  return { valid: true }
+}
+
+export async function verifyX402Payment(
+  paymentSignatureHeader: string,
+  expectedResource: string
+): Promise<{ valid: boolean; txid?: string; payer?: string; error?: string; simulated?: boolean }> {
+  try {
+    const paymentPayload = decodeHeaderValue<X402PaymentPayload>(paymentSignatureHeader)
+    const validation = validatePaymentPayload(paymentPayload, expectedResource)
+
+    if (!validation.valid) {
+      return { valid: false, error: validation.error }
     }
 
-    // Call the x402 facilitator to verify settlement
-    const facilitatorRes = await fetch(X402_ENDPOINT, {
+    if (X402_DEMO_MODE) {
+      return {
+        valid: true,
+        txid: `simulated-${Date.now()}`,
+        payer: 'demo-payer',
+        simulated: true,
+      }
+    }
+
+    if (!X402_FACILITATOR_URL) {
+      return { valid: false, error: 'No x402 facilitator configured for live settlement' }
+    }
+
+    const facilitatorRes = await fetch(joinUrl(X402_FACILITATOR_URL, '/settle'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scheme: payment.scheme,
-        network: payment.network,
-        payload: payment.payload,
-        resource: payment.resource,
+        x402Version: X402_VERSION,
+        paymentPayload,
+        paymentRequirements: paymentPayload.accepted,
       }),
     })
 
     if (!facilitatorRes.ok) {
-      const err = await facilitatorRes.text()
-      return { valid: false, error: err }
+      const errorBody = await facilitatorRes.text()
+      return { valid: false, error: errorBody || 'Facilitator settlement failed' }
     }
 
-    const result = await facilitatorRes.json()
-    return { valid: true, txid: result.txid }
-  } catch (e: any) {
-    return { valid: false, error: e.message }
+    const result = (await facilitatorRes.json()) as FacilitatorSettlementResponse
+
+    if (!result.success && !result.transaction && !result.txid) {
+      return { valid: false, error: result.error || 'Payment settlement was rejected' }
+    }
+
+    return {
+      valid: true,
+      txid: result.transaction || result.txid,
+      payer: result.payer,
+      simulated: false,
+    }
+  } catch (error: any) {
+    return { valid: false, error: error?.message || 'Unknown payment verification error' }
   }
-}
-
-// ─── USDCx token helpers ──────────────────────────────────────────────────────
-
-export const USDCX_CONTRACT_MAINNET = 'SM3VDXK3WZZSA84XXB1E2TF2QW2D29S67D9EKTR92.token-susdt'
-export const USDCX_CONTRACT_TESTNET = 'ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.usdcx-token'
-
-export const USDCX_CONTRACT =
-  process.env.NEXT_PUBLIC_NETWORK === 'mainnet'
-    ? USDCX_CONTRACT_MAINNET
-    : USDCX_CONTRACT_TESTNET
-
-/** Convert USDCx decimal string to micro-units (6 decimals) */
-export function usdcxToMicro(amount: string): number {
-  return Math.round(parseFloat(amount) * 1_000_000)
-}
-
-/** Format micro-USDCx back to human string */
-export function microToUsdcx(micro: number): string {
-  return (micro / 1_000_000).toFixed(2)
 }

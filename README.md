@@ -1,170 +1,164 @@
-# BitLegacy — Bitcoin Inheritance Protocol
+# BitLegacy
 
-> The first trustless, on-chain Bitcoin inheritance protocol built on Stacks.
-> Dead man's switch for Bitcoin. No lawyers. No intermediaries. Just Clarity.
+Bitcoin inheritance, built on Stacks.
 
-**[Live Demo](https://bitlegacy.vercel.app)** · **[Contract on Explorer](https://explorer.hiro.so)** · **Built for Buidl Battle #2 2026**
+BitLegacy is a dead-man-switch style estate vault for sBTC. The idea is simple: if I stop checking in, my beneficiaries should be able to claim funds on-chain without relying on lawyers, exchanges, or private off-chain arrangements.
 
----
+Built for **Buidl Battle #2 (2026)**.
 
-## The Problem
+- Live app: https://bitlegacy.vercel.app
+- Repo: https://github.com/AdekunleBamz/BitLegacy
 
-Over **$100 billion** in Bitcoin is permanently inaccessible because owners died without a succession plan. Crypto has no probate system — no will survives on-chain, no lawyer can transfer keys, no court can compel a wallet to release funds.
+## Why I built this
 
-BitLegacy solves this with a dead man's switch: if you stop checking in, your sBTC automatically flows to your heirs.
+A lot of people hold meaningful value in crypto but still have no practical inheritance flow. Traditional probate doesn’t map cleanly to self-custody. BitLegacy is my attempt to solve that in a way that is transparent, programmable, and testable.
 
----
+## What BitLegacy does
 
-## How It Works
+1. Estate owner creates an estate and locks funds in the `estate-vault` contract.
+2. Owner adds up to 5 beneficiaries and percentage allocations (must total 100%).
+3. Owner sets an inactivity window.
+4. Owner calls `proof-of-life` periodically to reset the timer.
+5. If the timer expires, anyone can trigger the estate.
+6. Beneficiaries claim from their own wallet.
+7. Optional: 2-of-3 guardians must confirm before claims are allowed.
 
-1. **Owner** deposits sBTC into `estate-vault.clar`, names up to 5 beneficiaries with percentage shares, sets an inactivity window (7–90 days), and optionally uploads an encrypted will to IPFS
-2. **Every month**, the owner calls `proof-of-life` to reset the countdown
-3. **If they stop checking in**, anyone can call `trigger-estate` once the window lapses
-4. **Heirs** call `claim-inheritance` from their beneficiary wallet once the estate is triggered
-5. **Guardians** (optional 2-of-3 multisig via `guardian.clar`) must confirm release before claims unlock for guardian-protected estates
+## Current implementation status
 
----
+- Core contracts are in `contracts/estate-vault.clar` and `contracts/guardian.clar`.
+- Frontend includes create, dashboard, claim, and guardian flows.
+- Estate windows are time-based (seconds) because the contract uses `stacks-block-time`.
+- Test presets are available for fast validation (`2h`, `6h`, `12h`, `24h`) plus longer presets (`7d`, `14d`, `30d`, `60d`, `90d`, `180d`, `1y`, `2y`).
+- x402-style paywall is wired for estate lookup API and defaults to **testnet STX** pricing.
 
-## Current Status
+## x402 integration (bounty work)
 
-- `clarinet check` passes for both contracts
-- `npm run build` passes for the Next.js app
-- Guardian confirmation is enforced directly during claims
-- Estate lookup API supports x402-style `402 Payment Required` responses
-- The current x402 flow remains demo-oriented until a live USDCx settlement path is wired end to end
+The route `GET /api/estate/:owner` is protected behind x402 V2-style headers:
 
----
+- `payment-required`
+- `payment-signature`
+- `payment-response`
 
-## x402 Integration (Bounty)
+Default config is testnet + STX (`0.01 STX` by default), with optional sBTC mode via env vars.
 
-Estate lookup API calls (`/api/estate/[owner]`) are gated behind x402-style micropayment responses. Heirs are quoted **$0.01 USDCx** per verification query.
+Important note:
+- Browser-side payment signing is currently demo-oriented unless you wire a real facilitator/signer flow.
+- For hackathon demo, `NEXT_PUBLIC_X402_DEMO=true` is the smooth path.
 
-Flow:
-1. Client calls `GET /api/estate/:owner` with no payment header
-2. Server returns `402` with `X402PaymentRequired` JSON describing payment terms
-3. Client prepares a payment payload for retry
-4. Client retries with `X-PAYMENT: base64(signedPayload)` header
-5. Server verifies the payload via the configured facilitator when available and returns estate data + `X-PAYMENT-RESPONSE`
+Relevant files:
+- `src/lib/x402.ts`
+- `src/app/api/estate/[owner]/route.ts`
+- `src/app/claim/page.tsx`
 
-See `src/lib/x402.ts` and `src/app/api/estate/[owner]/route.ts` for full implementation.
+## Hackathon fit
 
----
+BitLegacy fits:
 
-## Project Structure
+- Main hackathon track (Stacks app with real contract + frontend)
+- Best x402 Integration (API paywall and payment header flow)
+- Most Innovative Use of sBTC (estate custody and inheritance release model)
 
-```
+## Project structure
+
+```text
 bitlegacy/
 ├── contracts/
-│   ├── estate-vault.clar     # Core estate logic (Clarity 4)
-│   └── guardian.clar         # 2-of-3 guardian multisig
+│   ├── estate-vault.clar
+│   └── guardian.clar
 ├── settings/
-│   ├── Devnet.toml           # Clarinet devnet config
-│   ├── Testnet.toml          # Clarinet testnet config
-│   └── Mainnet.toml          # Clarinet mainnet config
-├── tests/
-│   └── estate-vault_test.ts  # Clarinet unit tests
+│   ├── Devnet.toml
+│   ├── Testnet.toml
+│   └── Mainnet.toml
+├── scripts/
+│   └── verify-testnet-deploy.sh
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx           # Landing / hero
-│   │   ├── dashboard/         # Owner portal
-│   │   ├── create/            # Estate creation wizard
-│   │   ├── claim/             # Heir claim portal (x402-gated)
-│   │   ├── guardian/          # Guardian confirmation portal
-│   │   └── api/estate/        # x402 backend route
+│   │   ├── page.tsx
+│   │   ├── create/
+│   │   ├── dashboard/
+│   │   ├── claim/
+│   │   ├── guardian/
+│   │   └── api/estate/
 │   ├── components/
-│   │   └── ConnectWallet.tsx  # Leather / Xverse wallet connect
 │   ├── hooks/
-│   │   └── useWallet.ts       # Stacks wallet session hook
 │   ├── lib/
-│   │   ├── stacks.ts          # All on-chain reads + tx builders
-│   │   ├── x402.ts            # x402 client + server helpers
-│   │   └── ipfs.ts            # AES-256-GCM will encryption + IPFS upload
 │   └── constants/
-│       └── contracts.ts       # Contract addresses, network config
+├── tests/
 ├── Clarinet.toml
 ├── .env.example
 └── README.md
 ```
 
----
-
-## Quick Start
+## Local setup
 
 ```bash
-# 1. Clone and install
 git clone https://github.com/AdekunleBamz/BitLegacy
 cd bitlegacy
 npm install
-
-# 2. Configure environment
 cp .env.example .env.local
-# Edit .env.local with your contract address and keys
+```
 
-# 3. Check contracts
+Update `.env.local` with your contract address and preferred x402 settings.
+
+Then run:
+
+```bash
 clarinet check
-
-# 4. Verify the frontend build
 npm run build
-
-# 5. Start frontend
 npm run dev
 ```
 
----
+## Testnet deploy flow
 
-## Deploy to Mainnet
+Deploy contracts:
 
 ```bash
-# 1. Deploy contracts
-clarinet deployments apply --mainnet
-
-# 2. Update .env.local
-NEXT_PUBLIC_NETWORK=mainnet
-NEXT_PUBLIC_CONTRACT_ADDRESS=<your_mainnet_address>
-
-# 3. Deploy frontend
-vercel --prod
+clarinet deployments apply --testnet
 ```
 
----
+Verify deploy (helper script):
 
-## Contract Addresses
+```bash
+scripts/verify-testnet-deploy.sh <DEPLOYER_ADDRESS> <ESTATE_TXID> <GUARDIAN_TXID>
+```
 
-| Contract | Network | Address |
-|----------|---------|---------|
-| `estate-vault` | Testnet | `ST...estate-vault` |
-| `guardian` | Testnet | `ST...guardian` |
-| `estate-vault` | Mainnet | `SP...estate-vault` |
-| `guardian` | Mainnet | `SP...guardian` |
+The verifier checks:
+- both contract deployment txs succeeded
+- contract IDs match deployer address
+- contract interfaces are queryable via Hiro API
 
----
+## Environment variables
 
-## Judging Criteria Mapping
+Use `.env.example` as baseline. Main ones:
 
-| Criterion | BitLegacy |
-|-----------|-----------|
-| Innovation | First Bitcoin inheritance protocol — zero prior art on Stacks |
-| Technical depth | Multi-contract release flow, guardian gating, encrypted IPFS wills, x402-gated API |
-| Stacks alignment | sBTC native, `stacks-block-time` core mechanic, stacks.js, Leather/Xverse |
-| UX / mainstream | 3-step wizard, plain-English UI, no crypto jargon required |
-| Impact | $100B problem, clear mainstream use case, production-shaped UX |
+- `NEXT_PUBLIC_NETWORK=testnet|mainnet`
+- `NEXT_PUBLIC_CONTRACT_ADDRESS=<deployer-address>`
+- `NEXT_PUBLIC_X402_ASSET=STX|sBTC`
+- `NEXT_PUBLIC_X402_PRICE_MICRO=10000`
+- `NEXT_PUBLIC_X402_DEMO=true|false`
+- `NEXT_PUBLIC_X402_FACILITATOR_URL=<optional>`
+- `NEXT_PUBLIC_NFT_STORAGE_KEY=<optional for will uploads>`
 
----
+## Notes for judges and collaborators
 
-## Built With
+What I focused on in this version:
 
-- **Stacks** — L2 Bitcoin smart contracts
-- **Clarity 4** — `stacks-block-time`, SIP-010 transfers, guardian-gated estate release
-- **sBTC (SIP-010)** — Bitcoin-backed token custody
-- **x402** — HTTP micropayment protocol (USDCx bounty integration)
-- **IPFS / nft.storage** — Encrypted will storage
-- **Next.js 14** — Frontend
-- **Stacks.js + @stacks/connect** — Wallet integration
+- Contract-first inheritance flow with clear state transitions
+- Practical guardian gating for higher-trust estates
+- Fast test presets so full lifecycle can be demonstrated on testnet
+- A working x402-shaped API monetization flow for estate lookups
 
----
+What still needs tightening for production:
+
+- Live non-demo x402 signer + facilitator settlement path
+- More adversarial contract tests and scenario coverage
+- Stronger operational monitoring around claim/release events
 
 ## Author
 
-**Bamzz** · [@Bamzzz on Farcaster](https://warpcast.com/bamzzz) · [@hrh_mckay on Twitter](https://twitter.com/hrh_mckay)
-GitHub: [github.com/AdekunleBamz](https://github.com/AdekunleBamz)
-Company: I-Engendering Ltd · bamzzstudio@gmail.com
+Bamzz
+
+- Farcaster: https://warpcast.com/bamzzz
+- X/Twitter: https://twitter.com/hrh_mckay
+- GitHub: https://github.com/AdekunleBamz
+- Email: bamzzstudio@gmail.com

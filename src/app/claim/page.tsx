@@ -12,11 +12,18 @@ import {
   buildTriggerEstateTx,
   getEstate,
   getGuardianPanel,
+  isCvTrue,
   isTriggered,
   satoshiToSBTC,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
-import { x402Fetch, type X402PaymentRequired } from '@/lib/x402'
+import {
+  buildDemoSignedTransaction,
+  getX402PriceLabel,
+  x402Fetch,
+  type X402PaymentRequired,
+} from '@/lib/x402'
+import { NETWORK, X402_DEMO_MODE } from '@/constants/contracts'
 
 export default function ClaimPage() {
   const { connected, address } = useWallet()
@@ -33,13 +40,13 @@ export default function ClaimPage() {
   const [x402Paying, setX402Paying] = useState(false)
 
   async function syncGuardianStatus(nextEstate: any) {
-    if (nextEstate?.['guardian-required']?.value !== 'true') {
+    if (!isCvTrue(nextEstate?.['guardian-required']?.value)) {
       setGuardianConfirmed(null)
       return
     }
 
     const panel = await getGuardianPanel(ownerAddress)
-    setGuardianConfirmed(panel?.value?.confirmed?.value === 'true')
+    setGuardianConfirmed(isCvTrue(panel?.confirmed?.value))
   }
 
   async function openWalletTx(tx: WalletContractCallOptions) {
@@ -66,12 +73,15 @@ export default function ClaimPage() {
         `/api/estate/${ownerAddress}`,
         { method: 'GET' },
         async (payReq: X402PaymentRequired) => {
-          // In production: open wallet to sign USDCx micropayment tx
-          // Return base64-encoded signed tx payload
           console.log('x402 payment required:', payReq)
-          // For hackathon demo: return a placeholder signed payload
-          // Real: call openContractCall for a USDCx transfer
-          return btoa(JSON.stringify({ demo: true, amount: payReq.maxAmountRequired }))
+
+          if (!X402_DEMO_MODE) {
+            throw new Error(
+              'Live x402 signer not configured yet. Enable NEXT_PUBLIC_X402_DEMO=true or plug in a facilitator-backed signer.'
+            )
+          }
+
+          return buildDemoSignedTransaction(payReq, address || undefined)
         }
       )
 
@@ -89,7 +99,7 @@ export default function ClaimPage() {
           isTriggered(ownerAddress),
         ])
         setEstate(e)
-        setTriggered(t?.value?.value === 'true')
+        setTriggered(isCvTrue(t?.value?.value))
         await syncGuardianStatus(e)
       }
     } catch {
@@ -100,7 +110,7 @@ export default function ClaimPage() {
           isTriggered(ownerAddress),
         ])
         setEstate(e)
-        setTriggered(t?.value?.value === 'true')
+        setTriggered(isCvTrue(t?.value?.value))
         await syncGuardianStatus(e)
       } catch (err: any) {
         setError('Could not find estate: ' + err.message)
@@ -143,7 +153,7 @@ export default function ClaimPage() {
         <div className="text-5xl">🎉</div>
         <h2 className="text-2xl font-bold">Inheritance Claimed!</h2>
         <a
-          href={`https://explorer.hiro.so/txid/${txId}?chain=testnet`}
+          href={`https://explorer.hiro.so/txid/${txId}?chain=${NETWORK}`}
           target="_blank"
           rel="noreferrer"
           className="text-[#f7931a] text-sm underline"
@@ -173,7 +183,11 @@ export default function ClaimPage() {
       {/* x402 badge */}
       <div className="flex items-center gap-2 mb-5 text-xs text-purple-400 bg-purple-950 border border-purple-800 rounded-xl px-4 py-2">
         <span>⚡</span>
-        <span>Estate lookups powered by <strong>x402</strong> — pay <strong>$0.01 USDCx</strong> per verification query</span>
+        <span>
+          Estate lookups use <strong>x402</strong> on <strong>{NETWORK}</strong> — quoted at{' '}
+          <strong>{getX402PriceLabel()}</strong> per verification query
+          {X402_DEMO_MODE ? ' (demo signer enabled)' : ''}
+        </span>
       </div>
 
       {/* Lookup form */}
@@ -248,7 +262,7 @@ export default function ClaimPage() {
               )}
             </div>
 
-            {estate['guardian-required']?.value === 'true' && (
+            {isCvTrue(estate['guardian-required']?.value) && (
               <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
                 <p className="label mb-2">Guardian status</p>
                 <p className="text-sm text-neutral-500">

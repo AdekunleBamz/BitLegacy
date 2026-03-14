@@ -10,6 +10,7 @@ import {
   buildConfirmReleaseTx,
   getGuardianPanel,
   getConfirmationCount,
+  isCvTrue,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
 
@@ -33,7 +34,7 @@ export default function GuardianPage() {
         getGuardianPanel(ownerAddress),
         getConfirmationCount(ownerAddress),
       ])
-      setPanel(p?.value)
+      setPanel(p)
       setConfirmCount(Number(c?.value?.value || 0))
     } catch (e: any) {
       setError('Could not find guardian panel: ' + e.message)
@@ -146,7 +147,7 @@ export default function GuardianPage() {
                   style={{ width: `${(confirmCount / 2) * 100}%` }}
                 />
               </div>
-              {panel?.confirmed?.value === 'true' && (
+              {isCvTrue(panel?.confirmed?.value) && (
                 <p className="text-xs text-green-400 mt-2">✓ Estate confirmed — heirs can now claim</p>
               )}
             </div>
@@ -154,7 +155,7 @@ export default function GuardianPage() {
             {/* Guardian list */}
             <div className="flex flex-col gap-2 mb-4">
               {(panel?.guardians?.value || []).map((g: any, i: number) => {
-                const isConfirmed = panel?.confirmations?.value?.[i]?.value === 'true'
+                const isConfirmed = isCvTrue(panel?.confirmations?.value?.[i]?.value)
                 const isMe = connected && address && g.value === address
                 return (
                   <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3 ${isMe ? 'bg-orange-950 border border-orange-800' : 'bg-[#1a1a1a]'}`}>
@@ -175,7 +176,7 @@ export default function GuardianPage() {
             </div>
 
             {/* Confirm button */}
-            {connected && panel?.confirmed?.value !== 'true' && (
+            {connected && !isCvTrue(panel?.confirmed?.value) && (
               <button
                 onClick={handleConfirm}
                 disabled={confirming || !connected}
@@ -185,7 +186,7 @@ export default function GuardianPage() {
               </button>
             )}
 
-            {panel?.confirmed?.value === 'true' && (
+            {isCvTrue(panel?.confirmed?.value) && (
               <div className="text-center text-green-400 text-sm py-2">
                 ✅ This estate has been confirmed by guardians
               </div>

@@ -12,6 +12,7 @@ import {
   getGuardianPanel,
   buildProofOfLifeTx,
   blocksToHuman,
+  isCvTrue,
   satoshiToSBTC,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
@@ -40,9 +41,9 @@ export default function Dashboard() {
     try {
       const [e, t] = await Promise.all([getEstate(address), getTimeRemaining(address)])
       setEstate(e)
-      if (e?.['guardian-required']?.value === 'true') {
+      if (isCvTrue(e?.['guardian-required']?.value)) {
         const panel = await getGuardianPanel(address)
-        setGuardianPanel(panel?.value ?? null)
+        setGuardianPanel(panel ?? null)
       } else {
         setGuardianPanel(null)
       }
@@ -123,7 +124,7 @@ export default function Dashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="label">Status</p>
-                {estate['triggered']?.value === 'true' ? (
+                {isCvTrue(estate['triggered']?.value) ? (
                   <span className="badge-red">Triggered — heirs can claim</span>
                 ) : (
                   <span className="badge-green">Active — you are alive</span>
@@ -139,7 +140,7 @@ export default function Dashboard() {
             </div>
 
             {/* Countdown */}
-            {timeLeft !== null && estate['triggered']?.value !== 'true' && (
+            {timeLeft !== null && !isCvTrue(estate['triggered']?.value) && (
               <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
                 <p className="label">Time until estate can trigger</p>
                 <p className="text-xl font-semibold">
@@ -150,13 +151,13 @@ export default function Dashboard() {
                   )}
                 </p>
                 <p className="text-xs text-neutral-500 mt-1">
-                  ~{timeLeft} blocks remaining
+                  ~{timeLeft} second{timeLeft === 1 ? '' : 's'} remaining
                 </p>
               </div>
             )}
 
             {/* Proof of life button */}
-            {estate['triggered']?.value !== 'true' && (
+            {!isCvTrue(estate['triggered']?.value) && (
               <button
                 onClick={handleProofOfLife}
                 disabled={pinging}
@@ -205,17 +206,17 @@ export default function Dashboard() {
           </div>
 
           {/* Guardian status */}
-          {estate['guardian-required']?.value === 'true' && (
+          {isCvTrue(estate['guardian-required']?.value) && (
             <div className="card">
               <p className="label mb-2">Guardian confirmation</p>
               <p className="text-sm text-neutral-400">
-                {guardianPanel?.confirmed?.value === 'true'
+                {isCvTrue(guardianPanel?.confirmed?.value)
                   ? 'Guardians confirmed — estate can be released'
                   : guardianPanel
                     ? `Waiting for ${
                         2 -
                         (guardianPanel.confirmations?.value?.filter(
-                          (entry: any) => entry?.value === 'true'
+                          (entry: any) => isCvTrue(entry?.value)
                         ).length || 0)
                       } more confirmation(s)`
                     : 'Guardian panel still needs to be set up'}

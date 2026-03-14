@@ -42,6 +42,19 @@ function splitContractId(contractId: string) {
   return { contractAddress, contractName }
 }
 
+function unwrapOptionalTuple(json: any) {
+  if (!json || json.value === null) return null
+  const inner = json.value
+  if (inner && typeof inner === 'object' && inner.value && typeof inner.value === 'object') {
+    return inner.value
+  }
+  return inner
+}
+
+export function isCvTrue(value: unknown): boolean {
+  return value === true || value === 'true'
+}
+
 function createContractCallOptions({
   contractId,
   functionName,
@@ -83,8 +96,7 @@ export async function getEstate(owner: string) {
     senderAddress: owner,
   })
   const json = cvToJSON(result)
-  if (json.value === null) return null
-  return json.value
+  return unwrapOptionalTuple(json)
 }
 
 export async function getTimeRemaining(owner: string) {
@@ -123,7 +135,7 @@ export async function getGuardianPanel(owner: string) {
     functionArgs: [standardPrincipalCV(owner)],
     senderAddress: owner,
   })
-  return cvToJSON(result)
+  return unwrapOptionalTuple(cvToJSON(result))
 }
 
 export async function getConfirmationCount(owner: string) {
@@ -281,10 +293,17 @@ export function sBTCToSatoshi(sbtc: number): number {
   return Math.round(sbtc * 1e8)
 }
 
-export function blocksToHuman(blocks: number): string {
-  const days = Math.floor(blocks / 144)
-  if (days < 1) return `${blocks} blocks`
+// Legacy name kept for compatibility. Input is countdown seconds from contract.
+export function blocksToHuman(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min${minutes > 1 ? 's' : ''}`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''}`
+  const days = Math.floor(hours / 24)
   if (days < 7) return `${days} day${days > 1 ? 's' : ''}`
   if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? 's' : ''}`
-  return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? 's' : ''}`
+  if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? 's' : ''}`
+  const years = Math.floor(days / 365)
+  return `${years} year${years > 1 ? 's' : ''}`
 }
