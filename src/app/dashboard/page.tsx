@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [estate, setEstate] = useState<any>(null)
   const [guardianPanel, setGuardianPanel] = useState<any>(null)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  const [liveTimeLeft, setLiveTimeLeft] = useState<number | null>(null)
   const [windowValue, setWindowValue] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [pinging, setPinging] = useState(false)
@@ -56,6 +57,41 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, address])
 
+  useEffect(() => {
+    if (legacyWindowDetected || isCvTrue(estate?.['triggered']?.value)) return
+
+    const timer = setInterval(() => {
+      setLiveTimeLeft(prev => {
+        if (prev === null) return null
+        return prev > 0 ? prev - 1 : 0
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [legacyWindowDetected, estate])
+
+  useEffect(() => {
+    if (!connected || !address) return
+    if (legacyWindowDetected || isCvTrue(estate?.['triggered']?.value)) return
+
+    const syncTimer = setInterval(() => {
+      void syncTimeRemaining(address)
+    }, 30000)
+
+    return () => clearInterval(syncTimer)
+  }, [connected, address, legacyWindowDetected, estate])
+
+  async function syncTimeRemaining(owner: string) {
+    try {
+      const t = await getTimeRemaining(owner)
+      if (t?.value) {
+        const next = Math.max(0, Number(t.value.value))
+        setTimeLeft(next)
+        setLiveTimeLeft(next)
+      }
+    } catch {}
+  }
+
   async function load() {
     if (!address) return
     setLoading(true)
@@ -69,8 +105,18 @@ export default function Dashboard() {
       } else {
         setGuardianPanel(null)
       }
-      if (t?.value) setTimeLeft(Number(t.value.value))
-    } catch {}
+      if (t?.value) {
+        const next = Math.max(0, Number(t.value.value))
+        setTimeLeft(next)
+        setLiveTimeLeft(next)
+      } else {
+        setTimeLeft(null)
+        setLiveTimeLeft(null)
+      }
+    } catch {
+      setTimeLeft(null)
+      setLiveTimeLeft(null)
+    }
     setLoading(false)
   }
 
@@ -188,19 +234,22 @@ export default function Dashboard() {
             </div>
 
             {/* Countdown */}
-            {timeLeft !== null && !isCvTrue(estate['triggered']?.value) && !legacyWindowDetected && (
+            {liveTimeLeft !== null && !isCvTrue(estate['triggered']?.value) && !legacyWindowDetected && (
               <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
                 <p className="label">Time until estate can trigger</p>
                 <p className="text-xl font-semibold">
-                  {timeLeft === 0 ? (
+                  {liveTimeLeft === 0 ? (
                     <span className="text-red-400">Window expired!</span>
                   ) : (
-                    blocksToHuman(timeLeft)
+                    blocksToHuman(liveTimeLeft)
                   )}
                 </p>
                 <p className="text-xs text-neutral-500 mt-1">
-                  ~{timeLeft} second{timeLeft === 1 ? '' : 's'} remaining
+                  ~{liveTimeLeft} second{liveTimeLeft === 1 ? '' : 's'} remaining
                 </p>
+                {timeLeft !== null && Math.abs(timeLeft - liveTimeLeft) > 5 && (
+                  <p className="text-[11px] text-neutral-600 mt-1">Syncing with on-chain time…</p>
+                )}
               </div>
             )}
 
