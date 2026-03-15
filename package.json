@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev-fresh.mjs",
     "dev:fresh": "node scripts/dev-fresh.mjs",
+    "dev:raw": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
