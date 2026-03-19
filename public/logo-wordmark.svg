@@ -7,25 +7,39 @@
       <stop offset="0.45" stop-color="#F7931A"/>
       <stop offset="1" stop-color="#C26A05"/>
     </linearGradient>
-    <linearGradient id="bgGrad" x1="8" y1="8" x2="200" y2="212" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#141414"/>
-      <stop offset="1" stop-color="#0A0A0A"/>
-    </linearGradient>
+    <radialGradient id="innerGlow" cx="105" cy="100" r="90" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7931A" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#F7931A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4"/>
+    </filter>
   </defs>
 
   <!-- Shield icon -->
   <g transform="translate(10, 8)">
-    <!-- Shield background -->
-    <path d="M95 10L175 48V95C175 145 140 175 95 192C50 175 15 145 15 95V48L95 10Z" fill="url(#bgGrad)" stroke="url(#shieldGrad)" stroke-width="5" stroke-linejoin="round"/>
-    <!-- Shield inner fill -->
-    <path d="M95 18L168 52V95C168 141 136 169 95 185C54 169 22 141 22 95V52L95 18Z" fill="#F7931A" fill-opacity="0.07"/>
+    <!-- Outer glow behind shield -->
+    <path d="M95 10L175 48V95C175 145 140 175 95 192C50 175 15 145 15 95V48L95 10Z" fill="url(#innerGlow)" filter="url(#glow)"/>
+
+    <!-- Shield outline -->
+    <path d="M95 16L170 52V95C170 142 137 171 95 187C53 171 20 142 20 95V52L95 16Z" fill="none" stroke="url(#shieldGrad)" stroke-width="6" stroke-linejoin="round"/>
+
+    <!-- Shield inner subtle fill -->
+    <path d="M95 24L164 56V95C164 138 134 166 95 181C56 166 26 138 26 95V56L95 24Z" fill="#F7931A" fill-opacity="0.06"/>
+
     <!-- Bitcoin B -->
     <path d="M73 52H100C112 52 120 58 120 68C120 75 116 80 110 83C118 86 123 92 123 101C123 113 114 120 100 120H73V52ZM87 62V80H98C106 80 110 76 110 71C110 66 106 62 98 62H87ZM87 89V110H101C109 110 113 106 113 100C113 94 109 89 101 89H87Z" fill="url(#shieldGrad)"/>
+
     <!-- Vertical bars -->
     <rect x="91" y="45" width="4" height="82" rx="2" fill="#F5A63D" fill-opacity="0.9"/>
     <rect x="97" y="45" width="4" height="82" rx="2" fill="#F5A63D" fill-opacity="0.9"/>
-    <!-- Infinity loop -->
+
+    <!-- Infinity loop at shield base -->
     <path d="M75 145C75 145 85 137 95 137C105 137 115 145 115 145C115 145 105 153 95 153C85 153 75 145 75 145Z" stroke="url(#shieldGrad)" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+    <!-- Accent arcs -->
+    <path d="M35 165C50 178 70 188 95 195" stroke="#F5BD68" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+    <path d="M155 30C140 20 120 12 95 6" stroke="#F5BD68" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
   </g>
 
   <!-- Typography -->

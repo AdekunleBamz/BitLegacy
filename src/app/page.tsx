@@ -53,7 +53,7 @@ export default function Home() {
       <nav className="flex items-center justify-between px-6 py-4 border-b border-[#1a1a1a]">
         <Link href="/" className="inline-flex items-center" aria-label="BitLegacy home">
           <Image
-            src="/logo-wordmark.svg"
+            src="/logo.png"
             alt="BitLegacy"
             width={240}
             height={54}

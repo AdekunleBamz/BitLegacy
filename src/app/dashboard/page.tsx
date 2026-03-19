@@ -146,7 +146,7 @@ export default function Dashboard() {
     return new Promise<any>((resolve, reject) => {
       void openContractCall({
         ...tx,
-        appDetails: { name: 'BitLegacy', icon: '/logo.svg' },
+        appDetails: { name: 'BitLegacy', icon: '/logo.png' },
         onFinish: data => resolve(data),
         onCancel: () => reject(new Error('Transaction cancelled')),
       })

@@ -36,7 +36,7 @@ export function useWallet() {
     showConnect({
       appDetails: {
         name: 'BitLegacy',
-        icon: '/logo.svg',
+        icon: '/logo.png',
       },
       redirectTo: '/',
       onFinish: () => {

@@ -10,14 +10,17 @@ export const metadata: Metadata = {
   description:
     'The first trustless, on-chain Bitcoin inheritance protocol. Pass down your sBTC to loved ones — no intermediaries, no lawyers, no lost keys.',
   icons: {
-    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
-    shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', type: 'image/png' },
+    ],
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
   },
   openGraph: {
     title: 'BitLegacy',
     description: 'Bitcoin inheritance on Stacks',
-    images: ['/logo-wordmark.svg'],
+    images: ['/logo.png'],
   },
 }
 
