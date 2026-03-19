@@ -5,6 +5,10 @@ import {
   callReadOnlyFunction,
   AnchorMode,
   PostConditionMode,
+  FungibleConditionCode,
+  makeStandardFungiblePostCondition,
+  makeContractFungiblePostCondition,
+  createAssetInfo,
   contractPrincipalCV,
   standardPrincipalCV,
   uintCV,
@@ -21,9 +25,11 @@ import {
 import type { ConnectNetwork, ContractCallRegularOptions } from '@stacks/connect'
 import { StacksTestnet, StacksMainnet, type StacksNetwork } from '@stacks/network'
 import {
+  CONTRACT_ADDRESS,
   ESTATE_VAULT_CONTRACT,
   GUARDIAN_CONTRACT,
   SBTC_CONTRACT,
+  SBTC_YIELD_CONTRACT,
   NETWORK,
 } from '@/constants/contracts'
 
@@ -55,18 +61,26 @@ export function isCvTrue(value: unknown): boolean {
   return value === true || value === 'true'
 }
 
+/** Build the sBTC asset info for post-conditions */
+function getSbtcAssetInfo() {
+  const { contractAddress, contractName } = splitContractId(SBTC_CONTRACT)
+  return createAssetInfo(contractAddress, contractName, 'sbtc-token')
+}
+
 function createContractCallOptions({
   contractId,
   functionName,
   functionArgs,
   fee,
   stxAddress,
+  postConditions,
 }: {
   contractId: string
   functionName: string
   functionArgs: ClarityValue[]
   fee: number
   stxAddress?: string
+  postConditions?: any[]
 }): WalletContractCallOptions {
   const { contractAddress, contractName } = splitContractId(contractId)
 
@@ -76,7 +90,8 @@ function createContractCallOptions({
     contractName,
     functionName,
     functionArgs,
-    postConditionMode: PostConditionMode.Allow,
+    postConditionMode: postConditions?.length ? PostConditionMode.Deny : PostConditionMode.Allow,
+    postConditions: postConditions || [],
     anchorMode: AnchorMode.Any,
     fee,
     stxAddress,
@@ -177,6 +192,14 @@ export async function buildCreateEstateTx({
   const { contractAddress: sbtcAddress, contractName: sbtcContractName } =
     splitContractId(SBTC_CONTRACT)
 
+  // Post-condition: sender sends exactly `amount` sBTC to the vault
+  const pc = makeStandardFungiblePostCondition(
+    senderAddress,
+    FungibleConditionCode.Equal,
+    amount,
+    getSbtcAssetInfo()
+  )
+
   return createContractCallOptions({
     contractId: ESTATE_VAULT_CONTRACT,
     functionName: 'create-estate',
@@ -198,6 +221,7 @@ export async function buildCreateEstateTx({
     ],
     fee: 2000,
     stxAddress: senderAddress,
+    postConditions: [pc],
   })
 }
 
@@ -232,6 +256,17 @@ export async function buildClaimInheritanceTx({
     splitContractId(SBTC_CONTRACT)
   const { contractAddress: guardianAddress, contractName: guardianContractName } =
     splitContractId(GUARDIAN_CONTRACT)
+  const { contractAddress: vaultAddr, contractName: vaultName } =
+    splitContractId(ESTATE_VAULT_CONTRACT)
+
+  // Post-condition: vault contract sends sBTC (amount validated by contract logic)
+  const pc = makeContractFungiblePostCondition(
+    vaultAddr,
+    vaultName,
+    FungibleConditionCode.GreaterEqual,
+    0,
+    getSbtcAssetInfo()
+  )
 
   return createContractCallOptions({
     contractId: ESTATE_VAULT_CONTRACT,
@@ -243,6 +278,7 @@ export async function buildClaimInheritanceTx({
     ],
     fee: 2000,
     stxAddress: senderAddress,
+    postConditions: [pc],
   })
 }
 
@@ -303,6 +339,149 @@ export async function buildUpdateEstateTx({
     ],
     fee: 1000,
     stxAddress: senderAddress,
+  })
+}
+
+export async function buildCancelEstateTx({
+  totalLocked,
+  senderAddress,
+}: {
+  totalLocked: number
+  senderAddress: string
+}) {
+  const { contractAddress: sbtcAddress, contractName: sbtcContractName } =
+    splitContractId(SBTC_CONTRACT)
+  const { contractAddress: vaultAddr, contractName: vaultName } =
+    splitContractId(ESTATE_VAULT_CONTRACT)
+
+  // Post-condition: vault returns exactly totalLocked sBTC to the owner
+  const pc = makeContractFungiblePostCondition(
+    vaultAddr,
+    vaultName,
+    FungibleConditionCode.Equal,
+    totalLocked,
+    getSbtcAssetInfo()
+  )
+
+  return createContractCallOptions({
+    contractId: ESTATE_VAULT_CONTRACT,
+    functionName: 'cancel-estate',
+    functionArgs: [
+      contractPrincipalCV(sbtcAddress, sbtcContractName),
+    ],
+    fee: 1000,
+    stxAddress: senderAddress,
+    postConditions: [pc],
+  })
+}
+
+// ─── YIELD VAULT FUNCTIONS ───────────────────────────────────────────────────
+
+export async function getYieldDeposit(owner: string) {
+  const { contractAddress, contractName } = splitContractId(SBTC_YIELD_CONTRACT)
+  const result = await callReadOnlyFunction({
+    network: getNetwork(),
+    contractAddress,
+    contractName,
+    functionName: 'get-deposit',
+    functionArgs: [standardPrincipalCV(owner)],
+    senderAddress: owner,
+  })
+  return unwrapOptionalTuple(cvToJSON(result))
+}
+
+export async function getAccruedYield(owner: string) {
+  const { contractAddress, contractName } = splitContractId(SBTC_YIELD_CONTRACT)
+  const result = await callReadOnlyFunction({
+    network: getNetwork(),
+    contractAddress,
+    contractName,
+    functionName: 'get-accrued-yield',
+    functionArgs: [standardPrincipalCV(owner)],
+    senderAddress: owner,
+  })
+  return cvToJSON(result)
+}
+
+export async function buildDepositToYieldTx({
+  amount,
+  senderAddress,
+}: {
+  amount: number
+  senderAddress: string
+}) {
+  const { contractAddress: sbtcAddress, contractName: sbtcContractName } =
+    splitContractId(SBTC_CONTRACT)
+
+  const pc = makeStandardFungiblePostCondition(
+    senderAddress,
+    FungibleConditionCode.Equal,
+    amount,
+    getSbtcAssetInfo()
+  )
+
+  return createContractCallOptions({
+    contractId: SBTC_YIELD_CONTRACT,
+    functionName: 'deposit-to-yield',
+    functionArgs: [
+      contractPrincipalCV(sbtcAddress, sbtcContractName),
+      uintCV(amount),
+    ],
+    fee: 1000,
+    stxAddress: senderAddress,
+    postConditions: [pc],
+  })
+}
+
+export async function buildWithdrawFromYieldTx(senderAddress: string) {
+  const { contractAddress: sbtcAddress, contractName: sbtcContractName } =
+    splitContractId(SBTC_CONTRACT)
+  const { contractAddress: yieldAddr, contractName: yieldName } =
+    splitContractId(SBTC_YIELD_CONTRACT)
+
+  const pc = makeContractFungiblePostCondition(
+    yieldAddr,
+    yieldName,
+    FungibleConditionCode.GreaterEqual,
+    0,
+    getSbtcAssetInfo()
+  )
+
+  return createContractCallOptions({
+    contractId: SBTC_YIELD_CONTRACT,
+    functionName: 'withdraw-from-yield',
+    functionArgs: [
+      contractPrincipalCV(sbtcAddress, sbtcContractName),
+    ],
+    fee: 1000,
+    stxAddress: senderAddress,
+    postConditions: [pc],
+  })
+}
+
+export async function buildHarvestYieldTx(senderAddress: string) {
+  const { contractAddress: sbtcAddress, contractName: sbtcContractName } =
+    splitContractId(SBTC_CONTRACT)
+  const { contractAddress: yieldAddr, contractName: yieldName } =
+    splitContractId(SBTC_YIELD_CONTRACT)
+
+  const pc = makeContractFungiblePostCondition(
+    yieldAddr,
+    yieldName,
+    FungibleConditionCode.GreaterEqual,
+    0,
+    getSbtcAssetInfo()
+  )
+
+  return createContractCallOptions({
+    contractId: SBTC_YIELD_CONTRACT,
+    functionName: 'harvest-yield',
+    functionArgs: [
+      contractPrincipalCV(sbtcAddress, sbtcContractName),
+    ],
+    fee: 800,
+    stxAddress: senderAddress,
+    postConditions: [pc],
   })
 }
 
