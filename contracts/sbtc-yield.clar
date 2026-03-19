@@ -1,5 +1,5 @@
 ;; BitLegacy - sbtc-yield.clar
-;; sBTC yield vault — estate owners can deposit sBTC to earn simulated yield
+;; sBTC yield vault - estate owners can deposit sBTC to earn simulated yield
 ;; Demonstrates sBTC composability for the sBTC bounty
 
 ;; ===== ERRORS =====

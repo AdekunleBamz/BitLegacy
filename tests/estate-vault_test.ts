@@ -440,3 +440,136 @@ Clarinet.test({
     assertEquals(withdrawBlock.receipts[0].result.includes('ok'), true)
   },
 })
+
+Clarinet.test({
+  name: 'sbtc-yield: rejects zero deposit',
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const owner = accounts.get('deployer')!
+
+    const block = chain.mineBlock([
+      Tx.contractCall('sbtc-yield', 'deposit-to-yield', [
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token'),
+        types.uint(0),
+      ], owner.address),
+    ])
+
+    assertStringIncludes(block.receipts[0].result, 'err u300') // ERR-ZERO-AMOUNT
+  },
+})
+
+Clarinet.test({
+  name: 'update-estate: owner can update window and IPFS CID',
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const owner = accounts.get('deployer')!
+    const heir1 = accounts.get('wallet_1')!
+
+    // Create estate first
+    chain.mineBlock([
+      Tx.contractCall('estate-vault', 'create-estate', [
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token'),
+        types.uint(1_000_000),
+        types.list([types.tuple({ addr: types.principal(heir1.address), 'share-pct': types.uint(100), label: types.ascii('Heir') })]),
+        types.uint(4320),
+        types.bool(false),
+        types.none(),
+      ], owner.address),
+    ])
+
+    // Update window and IPFS CID
+    const block = chain.mineBlock([
+      Tx.contractCall('estate-vault', 'update-estate', [
+        types.some(types.uint(8640)), // new window
+        types.some(types.ascii('QmTestCID12345678901234567890123456789012345678')),
+      ], owner.address),
+    ])
+
+    assertEquals(block.receipts[0].result, '(ok true)')
+  },
+})
+
+Clarinet.test({
+  name: 'guardian-gated claim: full lifecycle with guardian confirmation',
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const owner = accounts.get('deployer')!
+    const heir1 = accounts.get('wallet_1')!
+    const g1 = accounts.get('wallet_2')!
+    const g2 = accounts.get('wallet_3')!
+    const g3 = accounts.get('wallet_4')!
+
+    // 1. Create estate with guardian required
+    const createBlock = chain.mineBlock([
+      Tx.contractCall('estate-vault', 'create-estate', [
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token'),
+        types.uint(1_000_000),
+        types.list([types.tuple({ addr: types.principal(heir1.address), 'share-pct': types.uint(100), label: types.ascii('Heir') })]),
+        types.uint(100),
+        types.bool(true), // guardian required
+        types.none(),
+      ], owner.address),
+    ])
+    assertEquals(createBlock.receipts[0].result, '(ok true)')
+
+    // 2. Register guardians
+    chain.mineBlock([
+      Tx.contractCall('guardian', 'register-guardians', [
+        types.principal(owner.address),
+        types.principal(g1.address),
+        types.principal(g2.address),
+        types.principal(g3.address),
+      ], owner.address),
+    ])
+
+    // 3. Wait and trigger
+    chain.mineEmptyBlockUntil(200)
+    chain.mineBlock([
+      Tx.contractCall('estate-vault', 'trigger-estate', [types.principal(owner.address)], heir1.address),
+    ])
+
+    // 4. Two guardians confirm
+    chain.mineBlock([
+      Tx.contractCall('guardian', 'confirm-release', [types.principal(owner.address)], g1.address),
+    ])
+    chain.mineBlock([
+      Tx.contractCall('guardian', 'confirm-release', [types.principal(owner.address)], g2.address),
+    ])
+
+    // 5. Heir claims
+    const claimBlock = chain.mineBlock([
+      Tx.contractCall('estate-vault', 'claim-inheritance', [
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token'),
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.guardian'),
+        types.principal(owner.address),
+      ], heir1.address),
+    ])
+    assertEquals(claimBlock.receipts[0].result.includes('ok'), true)
+  },
+})
+
+Clarinet.test({
+  name: 'get-estate-count: returns correct count after creating estates',
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const owner = accounts.get('deployer')!
+    const heir1 = accounts.get('wallet_1')!
+
+    // Count should start at 0
+    const before = chain.callReadOnlyFn('estate-vault', 'get-estate-count', [], owner.address)
+    assertEquals(before.result, '(ok u0)')
+
+    // Create one estate
+    chain.mineBlock([
+      Tx.contractCall('estate-vault', 'create-estate', [
+        types.principal('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sbtc-token'),
+        types.uint(1_000_000),
+        types.list([types.tuple({ addr: types.principal(heir1.address), 'share-pct': types.uint(100), label: types.ascii('Heir') })]),
+        types.uint(4320),
+        types.bool(false),
+        types.none(),
+      ], owner.address),
+    ])
+
+    // Count should be 1
+    const after = chain.callReadOnlyFn('estate-vault', 'get-estate-count', [], owner.address)
+    assertEquals(after.result, '(ok u1)')
+  },
+})
+

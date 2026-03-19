@@ -1,0 +1,32 @@
+---
+id: 0
+name: Mainnet deployment
+network: mainnet
+stacks-node: "https://api.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoin.mainnet.stacks.co:8332"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: estate-vault
+            expected-sender: DEPLOYER_ADDRESS_HERE
+            cost: 92820
+            path: contracts/estate-vault.clar
+            anchor-block-only: true
+            clarity-version: 4
+        - contract-publish:
+            contract-name: guardian
+            expected-sender: DEPLOYER_ADDRESS_HERE
+            cost: 34710
+            path: contracts/guardian.clar
+            anchor-block-only: true
+            clarity-version: 4
+        - contract-publish:
+            contract-name: sbtc-yield
+            expected-sender: DEPLOYER_ADDRESS_HERE
+            cost: 50000
+            path: contracts/sbtc-yield.clar
+            anchor-block-only: true
+            clarity-version: 4
+      epoch: "3.3"
