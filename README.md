@@ -6,7 +6,7 @@ I built this because I kept reading about people losing access to their crypto a
 
 BitLegacy is my answer to that. It's a trustless inheritance protocol: you lock your sBTC, name your heirs, and check in periodically to prove you're still around. If you stop checking in, your beneficiaries can claim their shares. Everything happens on-chain through Clarity contracts — no third party ever touches your funds.
 
-**[Live Demo](https://bitlegacy.vercel.app)** · **Built for Buidl Battle #2 (2026)**
+**[Live Demo →](https://bitlegacy.vercel.app)** · **Built for Buidl Battle #2 (2026)**
 
 ## How it works
 
