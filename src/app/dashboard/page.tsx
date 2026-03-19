@@ -10,8 +10,14 @@ import {
   getEstate,
   getTimeRemaining,
   getGuardianPanel,
+  getYieldDeposit,
+  getAccruedYield,
   buildProofOfLifeTx,
   buildUpdateEstateTx,
+  buildDepositToYieldTx,
+  buildWithdrawFromYieldTx,
+  buildHarvestYieldTx,
+  sBTCToSatoshi,
   blocksToHuman,
   isCvTrue,
   satoshiToSBTC,
@@ -44,6 +50,11 @@ export default function Dashboard() {
   const [pinging, setPinging] = useState(false)
   const [repairingWindow, setRepairingWindow] = useState(false)
   const [txResult, setTxResult] = useState<string | null>(null)
+  // Yield state
+  const [yieldDeposit, setYieldDeposit] = useState<any>(null)
+  const [accruedYield, setAccruedYield] = useState<number>(0)
+  const [yieldAmount, setYieldAmount] = useState('')
+  const [yieldAction, setYieldAction] = useState<string | null>(null)
   const legacyWindowDetected =
     windowValue !== null &&
     isLegacyWindowValue(windowValue) &&
@@ -117,6 +128,17 @@ export default function Dashboard() {
       setTimeLeft(null)
       setLiveTimeLeft(null)
     }
+    // Load yield data
+    try {
+      const yd = await getYieldDeposit(address)
+      setYieldDeposit(yd)
+      if (yd) {
+        const ay = await getAccruedYield(address)
+        setAccruedYield(Number(ay?.value?.value || 0))
+      }
+    } catch {
+      setYieldDeposit(null)
+    }
     setLoading(false)
   }
 
@@ -169,6 +191,52 @@ export default function Dashboard() {
       console.error(e)
     }
     setRepairingWindow(false)
+  }
+
+  async function handleYieldDeposit() {
+    if (!address || !yieldAmount) return
+    setYieldAction('deposit')
+    try {
+      const tx = await buildDepositToYieldTx({
+        amount: sBTCToSatoshi(Number(yieldAmount)),
+        senderAddress: address,
+      })
+      const result = await openWalletTx(tx)
+      setTxResult(result.txId)
+      setYieldAmount('')
+      setTimeout(load, 3000)
+    } catch (e: any) {
+      console.error(e)
+    }
+    setYieldAction(null)
+  }
+
+  async function handleYieldWithdraw() {
+    if (!address) return
+    setYieldAction('withdraw')
+    try {
+      const tx = await buildWithdrawFromYieldTx(address)
+      const result = await openWalletTx(tx)
+      setTxResult(result.txId)
+      setTimeout(load, 3000)
+    } catch (e: any) {
+      console.error(e)
+    }
+    setYieldAction(null)
+  }
+
+  async function handleYieldHarvest() {
+    if (!address) return
+    setYieldAction('harvest')
+    try {
+      const tx = await buildHarvestYieldTx(address)
+      const result = await openWalletTx(tx)
+      setTxResult(result.txId)
+      setTimeout(load, 3000)
+    } catch (e: any) {
+      console.error(e)
+    }
+    setYieldAction(null)
   }
 
   if (!connected) {
@@ -367,6 +435,76 @@ export default function Dashboard() {
               </a>
             </div>
           )}
+
+          {/* sBTC Yield Vault */}
+          <div className="card border-green-900/30">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="label">sBTC Yield Vault</p>
+                <p className="text-xs text-neutral-500 mt-0.5">Earn 3.5% APY on deposited sBTC</p>
+              </div>
+              <span className="badge-green">3.5% APY</span>
+            </div>
+
+            {yieldDeposit ? (
+              <div className="flex flex-col gap-3">
+                <div className="bg-[#1a1a1a] rounded-xl p-4">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-neutral-400">Deposited</span>
+                    <span className="font-semibold text-green-400">
+                      {satoshiToSBTC(Number(yieldDeposit?.amount?.value || 0)).toFixed(6)} sBTC
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-400">Accrued yield</span>
+                    <span className="font-semibold text-[#f7931a]">
+                      {satoshiToSBTC(accruedYield).toFixed(8)} sBTC
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleYieldHarvest}
+                    disabled={!!yieldAction || accruedYield === 0}
+                    className="btn-secondary flex-1 text-xs"
+                  >
+                    {yieldAction === 'harvest' ? 'Harvesting…' : 'Harvest Yield'}
+                  </button>
+                  <button
+                    onClick={handleYieldWithdraw}
+                    disabled={!!yieldAction}
+                    className="btn-secondary flex-1 text-xs"
+                  >
+                    {yieldAction === 'withdraw' ? 'Withdrawing…' : 'Withdraw All'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-neutral-400">
+                  Deposit sBTC to start earning passive yield.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="0.001 sBTC"
+                    value={yieldAmount}
+                    onChange={e => setYieldAmount(e.target.value)}
+                    step="0.00001"
+                    min="0"
+                    className="flex-1"
+                  />
+                  <button
+                    onClick={handleYieldDeposit}
+                    disabled={!!yieldAction || !yieldAmount}
+                    className="btn-primary text-xs px-4"
+                  >
+                    {yieldAction === 'deposit' ? 'Depositing…' : 'Deposit'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Danger zone */}
           <div className="card border-red-900/50">
