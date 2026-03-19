@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { openContractCall } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
+import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import {
   buildConfirmReleaseTx,
@@ -91,12 +92,14 @@ export default function GuardianPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-xl mx-auto">
-      <Link href="/" className="text-neutral-500 text-sm hover:text-white mb-6 block">← Home</Link>
-      <h1 className="text-2xl font-bold mb-2">Guardian Portal</h1>
-      <p className="text-neutral-400 text-sm mb-8">
-        If you are a named guardian for an estate, confirm the release here. 2 of 3 guardians must confirm before heirs can claim.
-      </p>
+    <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
+      <Navbar />
+      <div className="mt-8 mb-8">
+        <h1 className="text-2xl font-bold mb-2">Guardian Portal</h1>
+        <p className="text-neutral-400 text-sm">
+          If you are a named guardian for an estate, confirm the release here. 2 of 3 guardians must confirm before heirs can claim.
+        </p>
+      </div>
 
       {!connected && (
         <div className="card mb-6 flex flex-col items-center gap-4 py-8">

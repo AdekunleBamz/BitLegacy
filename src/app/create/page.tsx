@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { openContractCall } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
+import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import {
   buildCreateEstateTx,
@@ -177,10 +178,12 @@ export default function CreateEstate() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-xl mx-auto">
-      <Link href="/" className="text-neutral-500 text-sm hover:text-white mb-6 block">← Home</Link>
-      <h1 className="text-2xl font-bold mb-2">Create Your Estate</h1>
-      <p className="text-neutral-400 text-sm mb-8">Set up your Bitcoin inheritance vault.</p>
+    <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
+      <Navbar />
+      <div className="mt-8 mb-8">
+        <h1 className="text-2xl font-bold mb-2">Create Your Estate</h1>
+        <p className="text-neutral-400 text-sm">Set up your Bitcoin inheritance vault.</p>
+      </div>
 
       {/* Step indicators */}
       <div className="flex items-center gap-2 mb-8">

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useWallet } from '@/hooks/useWallet'
+import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import { getEstate } from '@/lib/stacks'
 
@@ -50,19 +51,7 @@ export default function Home() {
   return (
     <main className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-[#1a1a1a]">
-        <Link href="/" className="inline-flex items-center" aria-label="BitLegacy home">
-          <Image
-            src="/logo.png"
-            alt="BitLegacy"
-            width={240}
-            height={54}
-            priority
-            className="h-9 w-auto sm:h-10"
-          />
-        </Link>
-        <ConnectWallet />
-      </nav>
+      <Navbar />
 
       {/* Hero */}
       <section className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24 gap-8">

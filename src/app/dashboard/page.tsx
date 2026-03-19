@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { openContractCall } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
+import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import {
   getEstate,
@@ -249,14 +250,10 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <Link href="/" className="text-neutral-500 text-sm hover:text-white">← Home</Link>
-          <h1 className="text-2xl font-bold mt-1">My Estate</h1>
-        </div>
-        <ConnectWallet />
+    <main className="min-h-screen px-4 pb-8 max-w-2xl mx-auto">
+      <Navbar />
+      <div className="mt-8 mb-8">
+        <h1 className="text-2xl font-bold">My Estate</h1>
       </div>
 
       {loading ? (

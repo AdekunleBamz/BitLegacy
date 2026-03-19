@@ -6,6 +6,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { openContractCall } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
+import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import {
   buildClaimInheritanceTx,
@@ -166,12 +167,14 @@ export default function ClaimPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-xl mx-auto">
-      <Link href="/" className="text-neutral-500 text-sm hover:text-white mb-6 block">← Home</Link>
-      <h1 className="text-2xl font-bold mb-2">Claim Inheritance</h1>
-      <p className="text-neutral-400 text-sm mb-8">
-        Enter the estate owner&apos;s address to check if an inheritance is available for you.
-      </p>
+    <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
+      <Navbar />
+      <div className="mt-8 mb-8">
+        <h1 className="text-2xl font-bold mb-2">Claim Inheritance</h1>
+        <p className="text-neutral-400 text-sm">
+          Enter the estate owner&apos;s address to check if an inheritance is available for you.
+        </p>
+      </div>
 
       {!connected && (
         <div className="card mb-6 flex flex-col items-center gap-4 py-8">
