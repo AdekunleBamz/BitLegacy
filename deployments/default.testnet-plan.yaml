@@ -22,4 +22,11 @@ plan:
             path: contracts/guardian.clar
             anchor-block-only: true
             clarity-version: 4
+        - contract-publish:
+            contract-name: sbtc-yield
+            expected-sender: ST5K2RHMSBH4PAP4PGX77MCVNK1ZEED07EH98W0P
+            cost: 50000
+            path: contracts/sbtc-yield.clar
+            anchor-block-only: true
+            clarity-version: 4
       epoch: "3.3"
