@@ -1,31 +1,49 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">BitLegacy Logo</title>
-  <desc id="desc">A modern Bitcoin-inspired shield mark for BitLegacy.</desc>
+  <desc id="desc">A golden shield with Bitcoin symbol representing BitLegacy inheritance protocol.</desc>
   <defs>
-    <linearGradient id="bg" x1="56" y1="48" x2="456" y2="464" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1C1308"/>
-      <stop offset="1" stop-color="#0C0C0C"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="132" y1="112" x2="380" y2="408" gradientUnits="userSpaceOnUse">
+    <linearGradient id="shieldGrad" x1="96" y1="40" x2="416" y2="472" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFD089"/>
       <stop offset="0.45" stop-color="#F7931A"/>
       <stop offset="1" stop-color="#C26A05"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 248) rotate(90) scale(220)">
-      <stop stop-color="#F7931A" stop-opacity="0.28"/>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#141414"/>
+      <stop offset="1" stop-color="#0A0A0A"/>
+    </linearGradient>
+    <radialGradient id="innerGlow" cx="256" cy="240" r="200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7931A" stop-opacity="0.12"/>
       <stop offset="1" stop-color="#F7931A" stop-opacity="0"/>
     </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8"/>
+    </filter>
   </defs>
 
-  <rect x="28" y="28" width="456" height="456" rx="112" fill="url(#bg)"/>
-  <rect x="28" y="28" width="456" height="456" rx="112" stroke="#302414" stroke-width="8"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect x="4" y="4" width="504" height="504" rx="110" stroke="#302414" stroke-width="4" fill="none"/>
 
-  <circle cx="256" cy="256" r="168" fill="url(#glow)"/>
-  <circle cx="256" cy="256" r="152" stroke="url(#accent)" stroke-width="18" fill="none"/>
+  <!-- Outer glow behind shield -->
+  <path d="M256 48L416 128V256C416 360 344 432 256 464C168 432 96 360 96 256V128L256 48Z" fill="url(#innerGlow)" filter="url(#glow)"/>
 
-  <path d="M188 128H289C340 128 374 156 374 200C374 228 359 250 334 261C365 271 385 297 385 334C385 386 345 416 287 416H188V128ZM252 186V239H285C307 239 320 229 320 212C320 194 307 186 285 186H252ZM252 293V358H293C317 358 331 345 331 326C331 306 317 293 293 293H252Z" fill="url(#accent)"/>
-  <rect x="224" y="104" width="22" height="304" rx="11" fill="#F5A63D" fill-opacity="0.95"/>
+  <!-- Shield outline -->
+  <path d="M256 56L408 132V256C408 354 340 424 256 456C172 424 104 354 104 256V132L256 56Z" fill="none" stroke="url(#shieldGrad)" stroke-width="14" stroke-linejoin="round"/>
 
-  <path d="M157 369C176 386 201 399 231 406" stroke="#F5BD68" stroke-width="12" stroke-linecap="round" opacity="0.7"/>
-  <path d="M355 143C336 126 311 113 281 106" stroke="#F5BD68" stroke-width="12" stroke-linecap="round" opacity="0.7"/>
+  <!-- Shield inner subtle fill -->
+  <path d="M256 72L396 142V256C396 348 332 414 256 444C180 414 116 348 116 256V142L256 72Z" fill="#F7931A" fill-opacity="0.06"/>
+
+  <!-- Bitcoin B -->
+  <path d="M196 152H272C296 152 316 168 316 196C316 216 306 230 290 238C310 246 324 264 324 292C324 324 300 344 268 344H196V152ZM236 192V240H266C282 240 292 230 292 216C292 202 282 192 266 192H236ZM236 272V304H272C290 304 300 293 300 284C300 271 290 272 272 272H236Z" fill="url(#shieldGrad)"/>
+
+  <!-- Vertical bars through B -->
+  <rect x="245" y="136" width="12" height="224" rx="6" fill="#F5A63D" fill-opacity="0.9"/>
+  <rect x="261" y="136" width="12" height="224" rx="6" fill="#F5A63D" fill-opacity="0.9"/>
+
+  <!-- Infinity/legacy loop at shield base -->
+  <path d="M216 398C216 398 236 380 256 380C276 380 296 398 296 398C296 398 276 416 256 416C236 416 216 398 216 398Z" stroke="url(#shieldGrad)" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Accent arcs -->
+  <path d="M152 380C178 404 212 422 256 438" stroke="#F5BD68" stroke-width="10" stroke-linecap="round" opacity="0.4"/>
+  <path d="M360 132C334 108 300 90 256 74" stroke="#F5BD68" stroke-width="10" stroke-linecap="round" opacity="0.4"/>
 </svg>

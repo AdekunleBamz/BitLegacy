@@ -1,18 +1,26 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1C1308"/>
-      <stop offset="1" stop-color="#0C0C0C"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="18" y1="15" x2="47" y2="50" gradientUnits="userSpaceOnUse">
+    <linearGradient id="shield" x1="12" y1="6" x2="52" y2="58" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFD089"/>
-      <stop offset="0.45" stop-color="#F7931A"/>
+      <stop offset="0.5" stop-color="#F7931A"/>
       <stop offset="1" stop-color="#C26A05"/>
     </linearGradient>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#141414"/>
+      <stop offset="1" stop-color="#0A0A0A"/>
+    </linearGradient>
   </defs>
-  <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#bg)"/>
-  <rect x="3" y="3" width="58" height="58" rx="14" stroke="#302414" stroke-width="2"/>
-  <circle cx="32" cy="32" r="19" stroke="url(#accent)" stroke-width="3"/>
-  <path d="M24 16H35C41 16 45 19 45 24C45 27 43 29 40 30C44 31 46 34 46 38C46 43 42 47 35 47H24V16ZM31 23V28H34C37 28 38 27 38 25C38 24 37 23 34 23H31ZM31 33V40H35C38 40 39 39 39 36C39 34 38 33 35 33H31Z" fill="url(#accent)"/>
-  <rect x="28" y="14" width="2.5" height="35" rx="1.25" fill="#F5A63D"/>
+  <!-- Background -->
+  <rect width="64" height="64" rx="14" fill="url(#bgGrad)"/>
+  <!-- Shield outline -->
+  <path d="M32 6L52 16V32C52 45 43 54 32 58C21 54 12 45 12 32V16L32 6Z" fill="none" stroke="url(#shield)" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Shield inner fill (subtle) -->
+  <path d="M32 9L49.5 17.5V32C49.5 43.5 41.5 51.8 32 55.5C22.5 51.8 14.5 43.5 14.5 32V17.5L32 9Z" fill="#F7931A" fill-opacity="0.08"/>
+  <!-- Bitcoin B -->
+  <path d="M25 20H33.5C37.5 20 40 22.2 40 25.5C40 27.8 38.8 29.5 36.8 30.3C39.2 31.1 41 33.2 41 36.2C41 40 38 42.5 33.5 42.5H25V20ZM29.5 24V29H33C35.2 29 36.5 28 36.5 26.5C36.5 25 35.2 24 33 24H29.5ZM29.5 32.5V38.5H34C36.3 38.5 37.5 37.3 37.5 35.5C37.5 33.7 36.3 32.5 34 32.5H29.5Z" fill="url(#shield)"/>
+  <!-- Vertical bars through B -->
+  <rect x="30.5" y="17" width="1.8" height="28" rx="0.9" fill="#F5A63D" fill-opacity="0.9"/>
+  <rect x="33.5" y="17" width="1.8" height="28" rx="0.9" fill="#F5A63D" fill-opacity="0.9"/>
+  <!-- Infinity loop at shield bottom -->
+  <path d="M27 49C27 49 29.5 47 32 47C34.5 47 37 49 37 49C37 49 34.5 51 32 51C29.5 51 27 49 27 49Z" stroke="url(#shield)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 </svg>
