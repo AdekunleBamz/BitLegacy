@@ -11,6 +11,7 @@ export const CONTRACT_ADDRESS =
 
 export const ESTATE_VAULT_CONTRACT = `${CONTRACT_ADDRESS}.estate-vault`
 export const GUARDIAN_CONTRACT = `${CONTRACT_ADDRESS}.guardian`
+export const SBTC_YIELD_CONTRACT = `${CONTRACT_ADDRESS}.sbtc-yield`
 
 // sBTC token contract (mainnet)
 export const SBTC_CONTRACT_MAINNET = 'SM3VDXK3WZZSA84XXB1E2TF2QW2D29S67D9EKTR92.sbtc-token'
