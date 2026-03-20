@@ -1,7 +1,7 @@
 'use client'
 // src/app/create/page.tsx — Create estate form
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { openContractCall } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
@@ -10,6 +10,7 @@ import ConnectWallet from '@/components/ConnectWallet'
 import {
   buildCreateEstateTx,
   buildRegisterGuardiansTx,
+  getEstate,
   getGuardianPanel,
   sBTCToSatoshi,
   type Beneficiary,
@@ -24,6 +25,8 @@ const EMPTY_BENE: BeneficiaryDraft = { addr: '', share_pct: 0, label: '', access
 
 export default function CreateEstate() {
   const { connected, address } = useWallet()
+  const [checkingExistingEstate, setCheckingExistingEstate] = useState(false)
+  const [hasExistingEstate, setHasExistingEstate] = useState(false)
 
   const [amount, setAmount] = useState('')
   const [window, setWindow] = useState(DEFAULT_WINDOW_BLOCKS) // 30 days default
@@ -42,6 +45,40 @@ export default function CreateEstate() {
 
   const totalPct = beneficiaries.reduce((a, b) => a + (Number(b.share_pct) || 0), 0)
   const isSubmittingLocked = submitting || uploading
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadExistingEstate() {
+      if (!connected || !address) {
+        setHasExistingEstate(false)
+        setCheckingExistingEstate(false)
+        return
+      }
+
+      setCheckingExistingEstate(true)
+      try {
+        const estate = await getEstate(address)
+        if (!cancelled) {
+          setHasExistingEstate(Boolean(estate))
+        }
+      } catch {
+        if (!cancelled) {
+          setHasExistingEstate(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingExistingEstate(false)
+        }
+      }
+    }
+
+    void loadExistingEstate()
+
+    return () => {
+      cancelled = true
+    }
+  }, [connected, address])
 
   function addBeneficiary() {
     if (beneficiaries.length >= 5) return
@@ -187,6 +224,36 @@ export default function CreateEstate() {
         <p className="text-neutral-400">Connect your wallet to create an estate.</p>
         <ConnectWallet cta="Connect Wallet" />
       </div>
+    )
+  }
+
+  if (checkingExistingEstate) {
+    return (
+      <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
+        <Navbar />
+        <div className="card mt-10 text-center py-16 text-neutral-400">Checking your estate…</div>
+      </main>
+    )
+  }
+
+  if (hasExistingEstate) {
+    return (
+      <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
+        <Navbar />
+        <div className="card mt-10 text-center py-16 flex flex-col items-center gap-6">
+          <div className="text-5xl">🏡</div>
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Estate already created</h1>
+            <p className="text-neutral-400 text-sm max-w-sm">
+              This wallet already has an estate. Head to your dashboard to manage it, update your
+              proof-of-life, and review beneficiaries.
+            </p>
+          </div>
+          <Link href="/dashboard" className="btn-primary">
+            Open Dashboard →
+          </Link>
+        </div>
+      </main>
     )
   }
 
