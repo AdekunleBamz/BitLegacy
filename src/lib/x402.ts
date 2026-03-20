@@ -2,18 +2,23 @@
 // Stacks-native x402 V2 helpers for BitLegacy
 
 import {
+  deserializeTransaction,
+  isTokenTransferPayload,
+  principalToString,
+} from '@stacks/transactions'
+import {
   NETWORK,
   SBTC_CONTRACT,
   X402_ASSET,
   X402_CAIP2_NETWORK,
-  X402_DEMO_MODE,
-  X402_FACILITATOR_URL,
   X402_PAY_TO_ADDRESS,
   X402_PRICE_MICRO,
   type X402Asset,
 } from '@/constants/contracts'
 
 const X402_VERSION = 2 as const
+const X402_INDEXING_RETRIES = 6
+const X402_INDEXING_DELAY_MS = 1000
 
 export interface X402PaymentRequirements {
   scheme: 'exact'
@@ -25,6 +30,7 @@ export interface X402PaymentRequirements {
   resource: string
   description: string
   mimeType: string
+  memo: string
   tokenContract?: string
 }
 
@@ -33,11 +39,14 @@ export interface X402PaymentRequired {
   paymentRequirements: X402PaymentRequirements
 }
 
+export interface X402SignedPayment {
+  transaction: string
+  txId?: string
+}
+
 export interface X402PaymentPayload {
   x402Version: typeof X402_VERSION
-  payload: {
-    transaction: string
-  }
+  payload: X402SignedPayment
   accepted: X402PaymentRequirements
 }
 
@@ -47,16 +56,18 @@ export interface X402PaymentResponse {
   transaction?: string
   network?: string
   error?: string
-  simulated?: boolean
 }
 
-interface FacilitatorSettlementResponse {
-  success?: boolean
-  payer?: string
-  transaction?: string
-  txid?: string
-  network?: string
-  error?: string
+interface IndexedTransaction {
+  tx_id: string
+  tx_status: string
+  tx_type: string
+  sender_address: string
+  token_transfer?: {
+    recipient_address?: string
+    amount?: string
+    memo?: string
+  }
 }
 
 function encodeBase64(value: string): string {
@@ -91,14 +102,33 @@ function toHeaders(headers?: HeadersInit): Headers {
   return new Headers(headers)
 }
 
-function joinUrl(baseUrl: string, path: string): string {
-  const normalizedBase = baseUrl.replace(/\/+$/, '')
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${normalizedBase}${normalizedPath}`
-}
-
 function getX402TokenContract(): string | undefined {
   return X402_ASSET === 'sBTC' ? SBTC_CONTRACT : undefined
+}
+
+function normalizeTxId(txid: string) {
+  return txid.replace(/^0x/i, '').toLowerCase()
+}
+
+function getHiroApiBase() {
+  return NETWORK === 'mainnet' ? 'https://api.hiro.so' : 'https://api.testnet.hiro.so'
+}
+
+function getHiroHeaders() {
+  const apiKey = process.env.HIRO_API_KEY || process.env.NEXT_PUBLIC_HIRO_API_KEY
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+
+  if (apiKey) {
+    headers['x-api-key'] = apiKey
+  }
+
+  return headers
+}
+
+async function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function formatWithDecimals(amount: string, decimals: number): string {
@@ -115,6 +145,11 @@ function formatWithDecimals(amount: string, decimals: number): string {
     .toString()
     .padStart(decimals, '0')
     .replace(/0+$/, '')}`
+}
+
+function buildX402Memo(resource: string) {
+  const resourceId = resource.split('/').filter(Boolean).at(-1) || 'lookup'
+  return `BLX402:${resourceId.slice(-27)}`
 }
 
 export function formatX402Amount(amount: string, asset: X402Asset = X402_ASSET): string {
@@ -138,6 +173,7 @@ export function build402Response(resource: string, payTo: string = X402_PAY_TO_A
       resource,
       description: `BitLegacy estate lookup on ${NETWORK} - pay ${getX402PriceLabel()} to unlock the response`,
       mimeType: 'application/json',
+      memo: buildX402Memo(resource),
       tokenContract: getX402TokenContract(),
     },
   }
@@ -162,34 +198,13 @@ export function parsePaymentResponse(response: Response): X402PaymentResponse | 
 
 export function buildPaymentPayload(
   paymentRequired: X402PaymentRequired,
-  signedTransaction: string
+  signedPayment: X402SignedPayment
 ): X402PaymentPayload {
   return {
     x402Version: X402_VERSION,
-    payload: {
-      transaction: signedTransaction,
-    },
+    payload: signedPayment,
     accepted: paymentRequired.paymentRequirements,
   }
-}
-
-export function buildDemoSignedTransaction(
-  paymentRequired: X402PaymentRequired,
-  payerAddress?: string
-): string {
-  const payload = JSON.stringify({
-    demo: true,
-    payer: payerAddress || 'demo-payer',
-    network: paymentRequired.paymentRequirements.network,
-    asset: paymentRequired.paymentRequirements.asset,
-    amount: paymentRequired.paymentRequirements.amount,
-    resource: paymentRequired.paymentRequirements.resource,
-    timestamp: Date.now(),
-  })
-
-  return `0x${Array.from(new TextEncoder().encode(payload))
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('')}`
 }
 
 async function readPaymentRequired(response: Response): Promise<X402PaymentRequired> {
@@ -214,7 +229,7 @@ async function readPaymentRequired(response: Response): Promise<X402PaymentRequi
 export async function x402Fetch(
   url: string,
   options: RequestInit = {},
-  paymentSigner: (paymentRequired: X402PaymentRequired) => Promise<string>
+  paymentSigner: (paymentRequired: X402PaymentRequired) => Promise<X402SignedPayment>
 ): Promise<Response> {
   const firstResponse = await fetch(url, options)
 
@@ -223,8 +238,8 @@ export async function x402Fetch(
   }
 
   const paymentRequired = await readPaymentRequired(firstResponse)
-  const signedTransaction = await paymentSigner(paymentRequired)
-  const paymentPayload = buildPaymentPayload(paymentRequired, signedTransaction)
+  const signedPayment = await paymentSigner(paymentRequired)
+  const paymentPayload = buildPaymentPayload(paymentRequired, signedPayment)
   const headers = toHeaders(options.headers)
 
   headers.set('payment-signature', encodeBase64(JSON.stringify(paymentPayload)))
@@ -273,6 +288,10 @@ function validatePaymentPayload(
     return { valid: false, error: 'Resource mismatch' }
   }
 
+  if (accepted.memo !== buildX402Memo(expectedResource)) {
+    return { valid: false, error: 'Memo mismatch' }
+  }
+
   if (accepted.asset === 'sBTC' && accepted.tokenContract !== SBTC_CONTRACT) {
     return { valid: false, error: 'Token contract mismatch' }
   }
@@ -280,10 +299,43 @@ function validatePaymentPayload(
   return { valid: true }
 }
 
+async function fetchIndexedTransaction(txid: string): Promise<IndexedTransaction | null> {
+  const prefixedTxid = `0x${normalizeTxId(txid)}`
+  const res = await fetch(
+    `${getHiroApiBase()}/extended/v1/tx/multiple?tx_id=${encodeURIComponent(prefixedTxid)}&unanchored=true`,
+    {
+      headers: getHiroHeaders(),
+      cache: 'no-store',
+    }
+  )
+
+  if (!res.ok) {
+    return null
+  }
+
+  const data = (await res.json()) as { results?: IndexedTransaction[] }
+  return data.results?.[0] || null
+}
+
+async function waitForIndexedTransaction(txid: string) {
+  for (let attempt = 0; attempt < X402_INDEXING_RETRIES; attempt += 1) {
+    const indexed = await fetchIndexedTransaction(txid)
+    if (indexed) {
+      return indexed
+    }
+
+    if (attempt < X402_INDEXING_RETRIES - 1) {
+      await wait(X402_INDEXING_DELAY_MS)
+    }
+  }
+
+  return null
+}
+
 export async function verifyX402Payment(
   paymentSignatureHeader: string,
   expectedResource: string
-): Promise<{ valid: boolean; txid?: string; payer?: string; error?: string; simulated?: boolean }> {
+): Promise<{ valid: boolean; txid?: string; payer?: string; error?: string }> {
   try {
     const paymentPayload = decodeHeaderValue<X402PaymentPayload>(paymentSignatureHeader)
     const validation = validatePaymentPayload(paymentPayload, expectedResource)
@@ -292,45 +344,75 @@ export async function verifyX402Payment(
       return { valid: false, error: validation.error }
     }
 
-    if (X402_DEMO_MODE) {
+    if (paymentPayload.accepted.asset !== 'STX') {
       return {
-        valid: true,
-        txid: `simulated-${Date.now()}`,
-        payer: 'demo-payer',
-        simulated: true,
+        valid: false,
+        error: 'This wallet-based x402 flow currently supports STX micropayments only',
       }
     }
 
-    if (!X402_FACILITATOR_URL) {
-      return { valid: false, error: 'No x402 facilitator configured for live settlement' }
+    const transaction = deserializeTransaction(paymentPayload.payload.transaction)
+    if (!isTokenTransferPayload(transaction.payload)) {
+      return { valid: false, error: 'Expected an STX token transfer payload' }
     }
 
-    const facilitatorRes = await fetch(joinUrl(X402_FACILITATOR_URL, '/settle'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        x402Version: X402_VERSION,
-        paymentPayload,
-        paymentRequirements: paymentPayload.accepted,
-      }),
-    })
-
-    if (!facilitatorRes.ok) {
-      const errorBody = await facilitatorRes.text()
-      return { valid: false, error: errorBody || 'Facilitator settlement failed' }
+    const derivedTxid = transaction.txid()
+    if (
+      paymentPayload.payload.txId &&
+      normalizeTxId(paymentPayload.payload.txId) !== normalizeTxId(derivedTxid)
+    ) {
+      return { valid: false, error: 'Signed transaction does not match the provided txid' }
     }
 
-    const result = (await facilitatorRes.json()) as FacilitatorSettlementResponse
+    const recipientAddress = principalToString(transaction.payload.recipient)
+    const amount = transaction.payload.amount.toString()
+    const memo = transaction.payload.memo.content
 
-    if (!result.success && !result.transaction && !result.txid) {
-      return { valid: false, error: result.error || 'Payment settlement was rejected' }
+    if (recipientAddress !== paymentPayload.accepted.payTo) {
+      return { valid: false, error: 'Signed payment recipient does not match payment requirements' }
+    }
+
+    if (amount !== paymentPayload.accepted.amount) {
+      return { valid: false, error: 'Signed payment amount does not match payment requirements' }
+    }
+
+    if (memo !== paymentPayload.accepted.memo) {
+      return { valid: false, error: 'Signed payment memo does not match payment requirements' }
+    }
+
+    const indexed = await waitForIndexedTransaction(derivedTxid)
+    if (!indexed) {
+      return { valid: false, error: 'Payment transaction was not indexed on Hiro in time' }
+    }
+
+    if (normalizeTxId(indexed.tx_id) !== normalizeTxId(derivedTxid)) {
+      return { valid: false, error: 'Indexed transaction did not match the signed payment txid' }
+    }
+
+    if (indexed.tx_type !== 'token_transfer') {
+      return { valid: false, error: 'Indexed transaction is not an STX transfer' }
+    }
+
+    if (indexed.tx_status !== 'success' && indexed.tx_status !== 'pending') {
+      return { valid: false, error: `Payment transaction status is ${indexed.tx_status}` }
+    }
+
+    if (indexed.token_transfer?.recipient_address !== paymentPayload.accepted.payTo) {
+      return { valid: false, error: 'Indexed payment recipient did not match payment requirements' }
+    }
+
+    if (indexed.token_transfer?.amount !== paymentPayload.accepted.amount) {
+      return { valid: false, error: 'Indexed payment amount did not match payment requirements' }
+    }
+
+    if ((indexed.token_transfer?.memo || '') !== paymentPayload.accepted.memo) {
+      return { valid: false, error: 'Indexed payment memo did not match payment requirements' }
     }
 
     return {
       valid: true,
-      txid: result.transaction || result.txid,
-      payer: result.payer,
-      simulated: false,
+      txid: derivedTxid,
+      payer: indexed.sender_address,
     }
   } catch (error: any) {
     return { valid: false, error: error?.message || 'Unknown payment verification error' }

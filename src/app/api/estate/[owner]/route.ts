@@ -36,6 +36,19 @@ function corsHeaders(extraHeaders: Record<string, string> = {}) {
   }
 }
 
+function getHiroHeaders() {
+  const apiKey = process.env.HIRO_API_KEY || process.env.NEXT_PUBLIC_HIRO_API_KEY
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (apiKey) {
+    headers['x-api-key'] = apiKey
+  }
+
+  return headers
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { owner: string } }
@@ -60,7 +73,7 @@ export async function GET(
     )
   }
 
-  const { valid, txid, payer, error, simulated } = await verifyX402Payment(paymentSignature, resource)
+  const { valid, txid, payer, error } = await verifyX402Payment(paymentSignature, resource)
 
   if (!valid) {
     return NextResponse.json(
@@ -88,7 +101,7 @@ export async function GET(
       `${apiBase}/v2/contracts/call-read/${CONTRACT_ADDRESS}/estate-vault/get-estate`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHiroHeaders(),
         body: JSON.stringify({
           sender: owner,
           arguments: [ownerArg],
@@ -100,7 +113,7 @@ export async function GET(
       `${apiBase}/v2/contracts/call-read/${CONTRACT_ADDRESS}/estate-vault/is-triggered`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHiroHeaders(),
         body: JSON.stringify({
           sender: owner,
           arguments: [ownerArg],
@@ -121,7 +134,6 @@ export async function GET(
         payment: {
           txid,
           payer,
-          simulated: Boolean(simulated),
         },
       },
       {
@@ -131,7 +143,6 @@ export async function GET(
             payer,
             transaction: txid,
             network: paymentRequired.paymentRequirements.network,
-            simulated,
           }),
         }),
       }

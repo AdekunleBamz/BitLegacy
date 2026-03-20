@@ -1,14 +1,15 @@
 // src/lib/ipfs.ts
-// Encrypted will storage via IPFS (using web3.storage or nft.storage)
-// Falls back to Stacks Gaia for auth'd storage
+// Heir-only encrypted will storage via IPFS
+
+import { userSession } from '@/hooks/useWallet'
 
 export interface WillDocument {
   version: '1.0'
   owner: string
   created_at: number
-  message: string          // personal message to heirs
-  instructions: string     // distribution instructions
-  documents: string[]      // list of referenced documents
+  message: string
+  instructions: string
+  documents: string[]
   contacts: {
     name: string
     role: string
@@ -17,89 +18,163 @@ export interface WillDocument {
   }[]
 }
 
-/**
- * Encrypts and uploads a will document to IPFS.
- * Returns the IPFS CID to store on-chain.
- * Uses a simple symmetric encryption with the owner's address as salt.
- */
+export interface WillAccessRecipient {
+  addr: string
+  publicKey: string
+  label?: string
+}
+
+interface EncryptedWillRecipient {
+  addr: string
+  publicKey: string
+  label?: string
+  cipherText: string
+}
+
+interface EncryptedWillEnvelope {
+  version: '2.0'
+  schema: 'bitlegacy-heir-access'
+  owner: string
+  created_at: number
+  recipients: EncryptedWillRecipient[]
+}
+
+const COMPRESSED_PUBLIC_KEY_RE = /^(02|03)[0-9a-fA-F]{64}$/
+
+function normalizeAddress(address: string) {
+  return address.trim().toUpperCase()
+}
+
+function normalizePublicKey(publicKey: string) {
+  return publicKey.trim().toLowerCase()
+}
+
+export function isValidAccessKey(publicKey: string) {
+  return COMPRESSED_PUBLIC_KEY_RE.test(publicKey.trim())
+}
+
+function assertSignedIn() {
+  if (!userSession.isUserSignedIn()) {
+    throw new Error('Connect your wallet first')
+  }
+}
+
+function normalizeRecipients(recipients: WillAccessRecipient[]) {
+  const seen = new Set<string>()
+
+  return recipients.map(recipient => {
+    const addr = normalizeAddress(recipient.addr)
+    const publicKey = normalizePublicKey(recipient.publicKey)
+
+    if (!addr) {
+      throw new Error('Each heir needs a wallet address')
+    }
+
+    if (!isValidAccessKey(publicKey)) {
+      throw new Error(`Invalid access key for beneficiary ${addr}`)
+    }
+
+    if (seen.has(addr)) {
+      throw new Error(`Duplicate beneficiary address detected: ${addr}`)
+    }
+
+    seen.add(addr)
+
+    return {
+      addr,
+      publicKey,
+      label: recipient.label?.trim() || undefined,
+    }
+  })
+}
+
+function isEncryptedWillEnvelope(value: unknown): value is EncryptedWillEnvelope {
+  if (!value || typeof value !== 'object') return false
+
+  const envelope = value as Partial<EncryptedWillEnvelope>
+
+  return (
+    envelope.version === '2.0' &&
+    envelope.schema === 'bitlegacy-heir-access' &&
+    Array.isArray(envelope.recipients)
+  )
+}
+
 export async function uploadWillToIPFS(
   will: WillDocument,
-  encryptionKey: string
+  recipients: WillAccessRecipient[]
 ): Promise<string> {
-  const plaintext = JSON.stringify(will)
-  const encrypted = await encryptData(plaintext, encryptionKey)
-  const blob = new Blob([encrypted], { type: 'application/octet-stream' })
+  assertSignedIn()
 
-  // Using nft.storage (free tier, IPFS-pinned)
-  const formData = new FormData()
-  formData.append('file', blob, 'will.enc')
-
-  const apiKey = process.env.NEXT_PUBLIC_NFT_STORAGE_KEY || ''
-  if (!apiKey) {
-    // Dev fallback: return mock CID
-    console.warn('No NFT_STORAGE_KEY — using mock CID')
-    return 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi'
+  const normalizedRecipients = normalizeRecipients(recipients)
+  if (!normalizedRecipients.length) {
+    throw new Error('Add at least one heir access key before uploading a will')
   }
 
-  const res = await fetch('https://api.nft.storage/upload', {
+  const plaintext = JSON.stringify(will)
+  const encryptedRecipients = await Promise.all(
+    normalizedRecipients.map(async recipient => ({
+      ...recipient,
+      cipherText: await userSession.encryptContent(plaintext, {
+        publicKey: recipient.publicKey,
+      }),
+    }))
+  )
+
+  const envelope: EncryptedWillEnvelope = {
+    version: '2.0',
+    schema: 'bitlegacy-heir-access',
+    owner: normalizeAddress(will.owner),
+    created_at: will.created_at,
+    recipients: encryptedRecipients,
+  }
+
+  const res = await fetch('/api/will/upload', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ envelope }),
   })
 
-  if (!res.ok) throw new Error(`IPFS upload failed: ${res.statusText}`)
-  const data = await res.json()
-  return data.value.cid as string
+  if (!res.ok) {
+    const errorBody = await res.text()
+    throw new Error(errorBody || 'IPFS upload failed')
+  }
+
+  const data = (await res.json()) as { cid?: string }
+  if (!data.cid) {
+    throw new Error('Upload response did not include a CID')
+  }
+
+  return data.cid
 }
 
-/**
- * Fetches and decrypts a will from IPFS by CID.
- */
 export async function fetchWillFromIPFS(
   cid: string,
-  decryptionKey: string
+  beneficiaryAddress: string
 ): Promise<WillDocument> {
-  const res = await fetch(`https://ipfs.io/ipfs/${cid}`)
+  assertSignedIn()
+
+  const res = await fetch(`https://ipfs.io/ipfs/${cid}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`IPFS fetch failed: ${res.statusText}`)
-  const encrypted = await res.text()
-  const plaintext = await decryptData(encrypted, decryptionKey)
-  return JSON.parse(plaintext) as WillDocument
-}
 
-// ─── AES-GCM encryption helpers ──────────────────────────────────────────────
+  const envelope = (await res.json()) as unknown
+  if (!isEncryptedWillEnvelope(envelope)) {
+    throw new Error('Unsupported encrypted will format')
+  }
 
-async function getKey(secret: string): Promise<CryptoKey> {
-  const enc = new TextEncoder()
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw', enc.encode(secret), { name: 'PBKDF2' }, false, ['deriveKey']
+  const entry = envelope.recipients.find(
+    recipient => normalizeAddress(recipient.addr) === normalizeAddress(beneficiaryAddress)
   )
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('bitlegacy-salt'), iterations: 100000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
-}
+  if (!entry) {
+    throw new Error('This wallet does not have access to decrypt the will')
+  }
 
-async function encryptData(plaintext: string, secret: string): Promise<string> {
-  const key = await getKey(secret)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const enc = new TextEncoder()
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv }, key, enc.encode(plaintext)
-  )
-  const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength)
-  combined.set(iv, 0)
-  combined.set(new Uint8Array(ciphertext), iv.byteLength)
-  return btoa(String.fromCharCode(...combined))
-}
+  const plaintext = await userSession.decryptContent(entry.cipherText, {
+    privateKey: userSession.loadUserData().appPrivateKey,
+  })
 
-async function decryptData(encrypted: string, secret: string): Promise<string> {
-  const key = await getKey(secret)
-  const combined = new Uint8Array(atob(encrypted).split('').map(c => c.charCodeAt(0)))
-  const iv = combined.slice(0, 12)
-  const ciphertext = combined.slice(12)
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
-  return new TextDecoder().decode(plaintext)
+  const decoded =
+    typeof plaintext === 'string' ? plaintext : new TextDecoder().decode(plaintext)
+
+  return JSON.parse(decoded) as WillDocument
 }

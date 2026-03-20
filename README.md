@@ -16,7 +16,7 @@ BitLegacy is my answer to that. It's a trustless inheritance protocol: you lock 
 
 3. **If you go silent,** anyone can trigger the estate once the window expires. Your heirs connect their wallets and claim their share. If you set up guardians, 2 out of 3 trusted contacts have to confirm before funds are released.
 
-4. **Optional extras:** You can write an encrypted will (AES-256-GCM, stored on IPFS), deposit sBTC into the yield vault to earn while you wait, and gate estate lookups behind x402 micropayments.
+4. **Optional extras:** You can write an encrypted will that is sealed separately for each heir's BitLegacy access key, deposit sBTC into the yield vault to earn while you wait, and gate estate lookups behind x402 micropayments.
 
 ## What's deployed
 
@@ -44,7 +44,7 @@ The Next.js frontend is deployed at [bitlegacy.vercel.app](https://bitlegacy.ver
 
 Estate lookups on the `/api/estate/[owner]` endpoint are gated behind the x402 payment protocol. When a client hits the API without a payment header, they get a `402` response with Stacks-native V2 headers describing the payment terms (0.01 STX on testnet by default).
 
-The client signs a payment, attaches it as a `payment-signature` header, and retries. The server validates the payload and returns the estate data along with a `payment-response` header. When a facilitator URL is configured, the server forwards the payment to `/settle` for real settlement. In demo mode, it accepts simulated signatures.
+The client opens a live STX wallet payment using the quoted amount, recipient, and memo, then retries with the signed transaction in the `payment-signature` header. The server verifies the signed transfer payload and the indexed Hiro transaction before it returns estate data along with a `payment-response` header.
 
 This is relevant for the **x402 bounty** — the idea is that estate verification becomes a paid service, which is useful for privacy (you don't want free lookups on who has inheritance estates) and creates a revenue model for the protocol.
 
@@ -65,7 +65,7 @@ bitlegacy/
 │   ├── guardian.clar         # 2-of-3 guardian multisig
 │   └── sbtc-yield.clar      # sBTC yield vault
 ├── tests/
-│   └── estate-vault_test.ts  # 16 Clarinet unit tests
+│   └── estate-vault_test.ts  # 17 Clarinet unit tests
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx           # Landing page
@@ -73,7 +73,8 @@ bitlegacy/
 │   │   ├── dashboard/         # Owner dashboard with yield vault
 │   │   ├── claim/             # Heir claim portal (x402-gated)
 │   │   ├── guardian/          # Guardian confirmation portal
-│   │   └── api/estate/        # x402-gated API route
+│   │   ├── api/estate/        # x402-gated API route
+│   │   └── api/will/          # Server-side encrypted will upload
 │   ├── components/
 │   │   └── ConnectWallet.tsx  # Leather / Xverse wallet connect
 │   ├── hooks/
@@ -81,7 +82,7 @@ bitlegacy/
 │   ├── lib/
 │   │   ├── stacks.ts          # Contract reads + tx builders
 │   │   ├── x402.ts            # x402 V2 client + server
-│   │   └── ipfs.ts            # AES-256-GCM encrypted will upload
+│   │   └── ipfs.ts            # Per-heir encrypted will helpers
 │   └── constants/
 │       └── contracts.ts       # Addresses, network config
 ├── deployments/
@@ -101,8 +102,7 @@ npm install
 cp .env.example .env.local
 # edit .env.local with your contract address if needed
 
-clarinet check          # verify contracts compile
-npm run build           # verify frontend builds  
+npm run verify          # contracts + lint + production build
 npm run dev             # start dev server
 ```
 
@@ -127,8 +127,8 @@ vercel --prod
 - Estate owners can cancel and reclaim their sBTC at any time before the estate is triggered
 - Guardian confirmation is enforced at claim time — the estate vault calls into the guardian contract directly
 - The `claimed` map prevents double-claiming: once an heir claims, they can't claim again
-- The x402 API validates payment signatures, network, amount, asset, and recipient on every request
-- Encrypted wills use PBKDF2 key derivation (100k iterations) with AES-256-GCM
+- The x402 API validates the signed transaction payload, memo, network, amount, recipient, and indexed Hiro transaction before returning estate data
+- Encrypted wills are sealed separately for each beneficiary access key, and decryption happens in-app through the heir's BitLegacy session
 
 ## Tech stack
 

@@ -10,11 +10,11 @@ echo "================================================"
 NETWORK=${1:-testnet}
 echo "Target network: $NETWORK"
 
-# ─── Step 1: Run tests ────────────────────────────────────────────────────────
+# ─── Step 1: Verify contracts + frontend ──────────────────────────────────────
 echo ""
-echo "[1/4] Running Clarinet tests..."
-clarinet test
-echo "✅ All tests passed"
+echo "[1/4] Verifying contracts and frontend..."
+npm run verify
+echo "✅ Verification passed"
 
 # ─── Step 2: Deploy contracts ─────────────────────────────────────────────────
 echo ""

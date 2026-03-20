@@ -4,30 +4,41 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { openContractCall } from '@stacks/connect'
+import { openContractCall, openSTXTransfer } from '@stacks/connect'
 import { useWallet } from '@/hooks/useWallet'
 import Navbar from '@/components/Navbar'
 import ConnectWallet from '@/components/ConnectWallet'
 import {
   buildClaimInheritanceTx,
   buildTriggerEstateTx,
-  getEstate,
   getGuardianPanel,
   isCvTrue,
-  isTriggered,
   satoshiToSBTC,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
 import {
-  buildDemoSignedTransaction,
+  fetchWillFromIPFS,
+  type WillDocument,
+} from '@/lib/ipfs'
+import {
   getX402PriceLabel,
   x402Fetch,
   type X402PaymentRequired,
+  type X402SignedPayment,
 } from '@/lib/x402'
-import { NETWORK, X402_DEMO_MODE } from '@/constants/contracts'
+import { NETWORK } from '@/constants/contracts'
+
+function getBeneficiaryEntry(estate: any, walletAddress: string | null) {
+  if (!walletAddress) return null
+
+  const beneficiaries = estate?.['beneficiaries']?.value || []
+  return (
+    beneficiaries.find((beneficiary: any) => beneficiary.value?.addr?.value === walletAddress) || null
+  )
+}
 
 export default function ClaimPage() {
-  const { connected, address } = useWallet()
+  const { connected, address, accessKey } = useWallet()
 
   const [ownerAddress, setOwnerAddress] = useState('')
   const [estate, setEstate] = useState<any>(null)
@@ -39,14 +50,18 @@ export default function ClaimPage() {
   const [txId, setTxId] = useState('')
   const [error, setError] = useState('')
   const [x402Paying, setX402Paying] = useState(false)
+  const [willData, setWillData] = useState<WillDocument | null>(null)
+  const [willLoading, setWillLoading] = useState(false)
+  const [willError, setWillError] = useState('')
+  const [copied, setCopied] = useState(false)
 
-  async function syncGuardianStatus(nextEstate: any) {
+  async function syncGuardianStatus(nextEstate: any, nextOwnerAddress: string) {
     if (!isCvTrue(nextEstate?.['guardian-required']?.value)) {
       setGuardianConfirmed(null)
       return
     }
 
-    const panel = await getGuardianPanel(ownerAddress)
+    const panel = await getGuardianPanel(nextOwnerAddress)
     setGuardianConfirmed(isCvTrue(panel?.confirmed?.value))
   }
 
@@ -61,63 +76,73 @@ export default function ClaimPage() {
     })
   }
 
+  async function requestX402Payment(
+    paymentRequired: X402PaymentRequired
+  ): Promise<X402SignedPayment> {
+    if (!connected || !address) {
+      throw new Error('Connect your wallet to pay for estate lookup')
+    }
+
+    if (paymentRequired.paymentRequirements.asset !== 'STX') {
+      throw new Error('This browser wallet flow currently supports STX x402 payments only')
+    }
+
+    return new Promise<X402SignedPayment>((resolve, reject) => {
+      void openSTXTransfer({
+        network: NETWORK,
+        stxAddress: address,
+        recipient: paymentRequired.paymentRequirements.payTo,
+        amount: paymentRequired.paymentRequirements.amount,
+        memo: paymentRequired.paymentRequirements.memo,
+        appDetails: { name: 'BitLegacy', icon: '/logo.png' },
+        onFinish: data =>
+          resolve({
+            transaction: data.txRaw,
+            txId: data.txId,
+          }),
+        onCancel: () => reject(new Error('x402 payment cancelled')),
+      })
+    })
+  }
+
+  async function copyAccessKey() {
+    if (!accessKey) return
+
+    await navigator.clipboard.writeText(accessKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   async function lookupEstate() {
     if (!ownerAddress) return
     setLoading(true)
     setError('')
+    setWillData(null)
+    setWillError('')
+    setEstate(null)
+
     try {
-      // Use x402 to pay for the estate lookup — this is the bounty integration
-      // The /api/estate/[owner] route returns 402 if no payment header
       setX402Paying(true)
 
-      const res = await x402Fetch(
-        `/api/estate/${ownerAddress}`,
-        { method: 'GET' },
-        async (payReq: X402PaymentRequired) => {
-          console.log('x402 payment required:', payReq)
-
-          if (!X402_DEMO_MODE) {
-            throw new Error(
-              'Live x402 signer not configured yet. Enable NEXT_PUBLIC_X402_DEMO=true or plug in a facilitator-backed signer.'
-            )
-          }
-
-          return buildDemoSignedTransaction(payReq, address || undefined)
-        }
-      )
-
+      const res = await x402Fetch(`/api/estate/${ownerAddress}`, { method: 'GET' }, requestX402Payment)
       setX402Paying(false)
 
-      if (res.ok) {
-        const data = await res.json()
-        setEstate(data.estate)
-        setTriggered(data.triggered)
-        await syncGuardianStatus(data.estate)
-      } else {
-        // Fallback: direct on-chain read
-        const [e, t] = await Promise.all([
-          getEstate(ownerAddress),
-          isTriggered(ownerAddress),
-        ])
-        setEstate(e)
-        setTriggered(isCvTrue(t?.value?.value))
-        await syncGuardianStatus(e)
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error || 'x402 payment verification failed')
       }
-    } catch {
-      // Final fallback: direct chain reads
-      try {
-        const [e, t] = await Promise.all([
-          getEstate(ownerAddress),
-          isTriggered(ownerAddress),
-        ])
-        setEstate(e)
-        setTriggered(isCvTrue(t?.value?.value))
-        await syncGuardianStatus(e)
-      } catch (err: any) {
-        setError('Could not find estate: ' + err.message)
-      }
+
+      const data = await res.json()
+      setEstate(data.estate)
+      setTriggered(data.triggered)
+      await syncGuardianStatus(data.estate, ownerAddress)
+    } catch (err: any) {
+      setError(err?.message || 'Could not look up estate')
+      setGuardianConfirmed(null)
+    } finally {
+      setLoading(false)
+      setX402Paying(false)
     }
-    setLoading(false)
   }
 
   async function handleTrigger() {
@@ -148,6 +173,23 @@ export default function ClaimPage() {
     setClaiming(false)
   }
 
+  async function handleDecryptWill() {
+    if (!estate?.['ipfs-cid']?.value || !address) return
+
+    setWillLoading(true)
+    setWillError('')
+
+    try {
+      const will = await fetchWillFromIPFS(estate['ipfs-cid'].value, address)
+      setWillData(will)
+    } catch (err: any) {
+      setWillData(null)
+      setWillError(err?.message || 'Could not decrypt will')
+    } finally {
+      setWillLoading(false)
+    }
+  }
+
   if (txId) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-4 gap-6">
@@ -166,34 +208,51 @@ export default function ClaimPage() {
     )
   }
 
+  const myEntry = getBeneficiaryEntry(estate, address)
+  const hasEncryptedWill = Boolean(estate?.['ipfs-cid']?.value)
+
   return (
     <main className="min-h-screen px-4 pb-8 max-w-xl mx-auto">
       <Navbar />
       <div className="mt-8 mb-8">
         <h1 className="text-2xl font-bold mb-2">Claim Inheritance</h1>
         <p className="text-neutral-400 text-sm">
-          Enter the estate owner&apos;s address to check if an inheritance is available for you.
+          Look up an estate, pay the x402 fee, and unlock beneficiary-only will access.
         </p>
       </div>
 
       {!connected && (
         <div className="card mb-6 flex flex-col items-center gap-4 py-8">
-          <p className="text-neutral-400 text-sm">Connect your wallet to claim</p>
+          <p className="text-neutral-400 text-sm">Connect your wallet to pay and claim</p>
           <ConnectWallet />
         </div>
       )}
 
-      {/* x402 badge */}
-      <div className="flex items-center gap-2 mb-5 text-xs text-purple-400 bg-purple-950 border border-purple-800 rounded-xl px-4 py-2">
-        <span>⚡</span>
+      {connected && accessKey && (
+        <div className="card mb-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="label mb-2">Your heir access key</p>
+              <p className="text-xs text-neutral-500 mb-3">
+                Share this with the estate owner before they encrypt a will for you.
+              </p>
+              <p className="text-xs font-mono break-all text-neutral-300">{accessKey}</p>
+            </div>
+            <button onClick={copyAccessKey} className="btn-secondary text-xs shrink-0">
+              {copied ? 'Copied' : 'Copy key'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 mb-5 text-xs text-orange-300 bg-orange-950 border border-orange-800 rounded-xl px-4 py-2">
+        <span>402</span>
         <span>
-          Estate lookups use <strong>x402</strong> on <strong>{NETWORK}</strong> — quoted at{' '}
-          <strong>{getX402PriceLabel()}</strong> per verification query
-          {X402_DEMO_MODE ? ' (demo signer enabled)' : ''}
+          Estate lookups use live <strong>x402</strong> payments on <strong>{NETWORK}</strong> at{' '}
+          <strong>{getX402PriceLabel()}</strong> per request.
         </span>
       </div>
 
-      {/* Lookup form */}
       <div className="flex flex-col gap-3 mb-6">
         <label className="label">Estate owner address</label>
         <input
@@ -204,10 +263,10 @@ export default function ClaimPage() {
         />
         <button
           onClick={lookupEstate}
-          disabled={loading || !ownerAddress}
+          disabled={loading || !ownerAddress || !connected}
           className="btn-primary"
         >
-          {x402Paying ? '⚡ Processing x402 payment…' : loading ? 'Looking up…' : 'Look up estate'}
+          {x402Paying ? 'Opening wallet for x402 payment…' : loading ? 'Looking up…' : 'Pay + look up estate'}
         </button>
       </div>
 
@@ -217,7 +276,6 @@ export default function ClaimPage() {
         </div>
       )}
 
-      {/* Estate found */}
       {estate && (
         <div className="flex flex-col gap-4">
           <div className="card">
@@ -238,28 +296,26 @@ export default function ClaimPage() {
               </div>
             </div>
 
-            {/* Check if caller is a beneficiary */}
             <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
               <p className="label mb-2">Your share</p>
               {connected && address ? (
-                (() => {
-                  const benes = estate['beneficiaries']?.value || []
-                  const myEntry = benes.find((b: any) => b.value?.addr?.value === address)
-                  if (myEntry) {
-                    const pct = myEntry.value?.['share-pct']?.value
-                    const total = Number(estate['total-locked']?.value || 0)
-                    const myShare = (total * pct) / 100
-                    return (
-                      <div>
-                        <p className="text-lg font-bold text-green-400">
-                          {satoshiToSBTC(myShare).toFixed(6)} sBTC
-                        </p>
-                        <p className="text-xs text-neutral-500 mt-0.5">{pct}% of estate · label: {myEntry.value?.label?.value}</p>
-                      </div>
-                    )
-                  }
-                  return <p className="text-sm text-neutral-500">Your address is not a beneficiary of this estate.</p>
-                })()
+                myEntry ? (
+                  <div>
+                    <p className="text-lg font-bold text-green-400">
+                      {satoshiToSBTC(
+                        (Number(estate['total-locked']?.value || 0) *
+                          Number(myEntry.value?.['share-pct']?.value || 0)) /
+                          100
+                      ).toFixed(6)}{' '}
+                      sBTC
+                    </p>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      {myEntry.value?.['share-pct']?.value}% of estate · label: {myEntry.value?.label?.value}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-neutral-500">Your address is not a beneficiary of this estate.</p>
+                )
               ) : (
                 <p className="text-sm text-neutral-500">Connect wallet to check your share.</p>
               )}
@@ -276,7 +332,36 @@ export default function ClaimPage() {
               </div>
             )}
 
-            {/* Trigger button if window elapsed but not triggered */}
+            {hasEncryptedWill && myEntry && (
+              <div className="bg-[#1a1a1a] rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p className="label mb-1">Encrypted will</p>
+                    <p className="text-xs text-neutral-500">
+                      Only heirs with registered BitLegacy access keys can decrypt this message.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDecryptWill}
+                    disabled={willLoading}
+                    className="btn-secondary text-xs shrink-0"
+                  >
+                    {willLoading ? 'Decrypting…' : willData ? 'Decrypt again' : 'Decrypt will'}
+                  </button>
+                </div>
+
+                {willError && (
+                  <p className="text-sm text-red-400">{willError}</p>
+                )}
+
+                {willData && (
+                  <div className="border border-[#2a2a2a] rounded-xl p-4">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{willData.message}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {!triggered && (
               <button
                 onClick={handleTrigger}
@@ -287,8 +372,7 @@ export default function ClaimPage() {
               </button>
             )}
 
-            {/* Claim button */}
-            {triggered && connected && guardianConfirmed !== false && (
+            {triggered && connected && guardianConfirmed !== false && myEntry && (
               <button
                 onClick={handleClaim}
                 disabled={claiming}

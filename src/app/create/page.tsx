@@ -15,17 +15,19 @@ import {
   type Beneficiary,
   type WalletContractCallOptions,
 } from '@/lib/stacks'
-import { uploadWillToIPFS, type WillDocument } from '@/lib/ipfs'
+import { isValidAccessKey, uploadWillToIPFS, type WillDocument } from '@/lib/ipfs'
 import { DEFAULT_WINDOW_BLOCKS, WINDOW_OPTIONS } from '@/constants/contracts'
 
-const EMPTY_BENE: Beneficiary = { addr: '', share_pct: 0, label: '' }
+type BeneficiaryDraft = Beneficiary & { access_key: string }
+
+const EMPTY_BENE: BeneficiaryDraft = { addr: '', share_pct: 0, label: '', access_key: '' }
 
 export default function CreateEstate() {
   const { connected, address } = useWallet()
 
   const [amount, setAmount] = useState('')
   const [window, setWindow] = useState(DEFAULT_WINDOW_BLOCKS) // 30 days default
-  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([{ ...EMPTY_BENE }])
+  const [beneficiaries, setBeneficiaries] = useState<BeneficiaryDraft[]>([{ ...EMPTY_BENE }])
   const [guardianRequired, setGuardianRequired] = useState(false)
   const [g1, setG1] = useState('')
   const [g2, setG2] = useState('')
@@ -46,7 +48,7 @@ export default function CreateEstate() {
     setBeneficiaries([...beneficiaries, { ...EMPTY_BENE }])
   }
 
-  function updateBene(i: number, field: keyof Beneficiary, val: string | number) {
+  function updateBene(i: number, field: keyof BeneficiaryDraft, val: string | number) {
     const updated = [...beneficiaries]
     ;(updated[i] as any)[field] = val
     setBeneficiaries(updated)
@@ -73,6 +75,9 @@ export default function CreateEstate() {
     if (!amount || Number(amount) <= 0) return setError('Enter a valid sBTC amount')
     if (totalPct !== 100) return setError('Beneficiary shares must total 100%')
     if (beneficiaries.some(b => !b.addr)) return setError('All beneficiary addresses required')
+    if (willMessage.trim() && beneficiaries.some(b => !isValidAccessKey(b.access_key))) {
+      return setError('Each heir needs a valid BitLegacy access key before you can encrypt a will')
+    }
     if (guardianRequired && [g1, g2, g3].some(g => !g.trim())) {
       return setError('All three guardian addresses are required')
     }
@@ -109,11 +114,19 @@ export default function CreateEstate() {
           contacts: [],
         }
         try {
-          ipfsCid = await uploadWillToIPFS(willDoc, address)
-        } catch {
-          // Non-fatal — estate created without will
+          ipfsCid = await uploadWillToIPFS(
+            willDoc,
+          beneficiaries.map(beneficiary => ({
+              addr: beneficiary.addr,
+              publicKey: beneficiary.access_key,
+              label: beneficiary.label || 'Beneficiary',
+            }))
+          )
+        } catch (uploadError: any) {
+          throw new Error(uploadError?.message || 'Could not encrypt and upload will')
+        } finally {
+          setUploading(false)
         }
-        setUploading(false)
       }
 
       const tx = await buildCreateEstateTx({
@@ -275,6 +288,15 @@ export default function CreateEstate() {
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">%</span>
                     </div>
                   </div>
+                  <input
+                    type="text"
+                    placeholder="Heir access key (from Claim page)"
+                    value={b.access_key}
+                    onChange={e => updateBene(i, 'access_key', e.target.value)}
+                  />
+                  <p className="text-[11px] text-neutral-500">
+                    Needed only if you want this heir to decrypt your encrypted will in-app.
+                  </p>
                 </div>
               ))}
             </div>
@@ -324,6 +346,13 @@ export default function CreateEstate() {
       {/* Step 2: Will message */}
       {step === 2 && (
         <div className="flex flex-col gap-5">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+            <p className="text-sm font-semibold mb-1">Heir-only decryption</p>
+            <p className="text-xs text-neutral-500 leading-relaxed">
+              Ask each beneficiary to open the Claim page, connect their wallet, and send you their BitLegacy access key.
+              Your will is encrypted separately for those keys, so only the heirs you include can decrypt it.
+            </p>
+          </div>
           <div>
             <label className="label">Personal message to your heirs (optional)</label>
             <textarea
@@ -334,7 +363,7 @@ export default function CreateEstate() {
               className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-orange-400 transition-colors w-full resize-none"
             />
             <p className="text-xs text-neutral-500 mt-1">
-              Encrypted with AES-256-GCM and stored on IPFS. Only heirs with your address key can decrypt.
+              Encrypted per-heir and stored on IPFS. Only beneficiaries whose BitLegacy access keys you include can decrypt.
             </p>
           </div>
           <div className="flex gap-3">
@@ -370,6 +399,12 @@ export default function CreateEstate() {
                 <span className="text-neutral-400">Will message</span>
                 <span>{willMessage ? 'Included (encrypted)' : 'None'}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-400">Heir access keys</span>
+                <span>
+                  {beneficiaries.filter(b => isValidAccessKey(b.access_key)).length} / {beneficiaries.length}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -382,6 +417,12 @@ export default function CreateEstate() {
           {totalPct !== 100 && (
             <div className="bg-orange-950 border border-orange-800 rounded-xl px-4 py-3 text-orange-300 text-sm">
               Beneficiary shares are currently {totalPct}%. Set them to exactly 100% before creating the estate.
+            </div>
+          )}
+
+          {willMessage.trim() && beneficiaries.some(b => !isValidAccessKey(b.access_key)) && (
+            <div className="bg-orange-950 border border-orange-800 rounded-xl px-4 py-3 text-orange-300 text-sm">
+              Add a valid access key for each heir before encrypting a will.
             </div>
           )}
 

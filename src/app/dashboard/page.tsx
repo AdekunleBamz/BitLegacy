@@ -15,6 +15,7 @@ import {
   getAccruedYield,
   buildProofOfLifeTx,
   buildUpdateEstateTx,
+  buildCancelEstateTx,
   buildDepositToYieldTx,
   buildWithdrawFromYieldTx,
   buildHarvestYieldTx,
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [pinging, setPinging] = useState(false)
   const [repairingWindow, setRepairingWindow] = useState(false)
   const [txResult, setTxResult] = useState<string | null>(null)
+  const [cancelingEstate, setCancelingEstate] = useState(false)
   // Yield state
   const [yieldDeposit, setYieldDeposit] = useState<any>(null)
   const [accruedYield, setAccruedYield] = useState<number>(0)
@@ -240,6 +242,24 @@ export default function Dashboard() {
     setYieldAction(null)
   }
 
+  async function handleCancelEstate() {
+    if (!address || !estate) return
+
+    setCancelingEstate(true)
+    try {
+      const tx = await buildCancelEstateTx({
+        totalLocked: Number(estate['total-locked']?.value || 0),
+        senderAddress: address,
+      })
+      const result = await openWalletTx(tx)
+      setTxResult(result.txId)
+      setTimeout(load, 3000)
+    } catch (e: any) {
+      console.error(e)
+    }
+    setCancelingEstate(false)
+  }
+
   if (!connected) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6">
@@ -422,14 +442,12 @@ export default function Dashboard() {
           {estate['ipfs-cid']?.value && (
             <div className="card">
               <p className="label mb-2">Encrypted will</p>
-              <a
-                href={`https://ipfs.io/ipfs/${estate['ipfs-cid'].value}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-[#f7931a] hover:underline font-mono"
-              >
-                ipfs://{estate['ipfs-cid'].value.slice(0, 20)}…
-              </a>
+              <p className="text-sm text-neutral-400">
+                Beneficiaries decrypt this in the Claim portal using their registered BitLegacy access keys.
+              </p>
+              <p className="text-xs text-neutral-500 font-mono mt-2">
+                CID: {estate['ipfs-cid'].value}
+              </p>
             </div>
           )}
 
@@ -506,12 +524,18 @@ export default function Dashboard() {
           {/* Danger zone */}
           <div className="card border-red-900/50">
             <p className="label text-red-500 mb-3">Danger zone</p>
-            <Link
-              href="/create?action=cancel"
-              className="text-sm text-red-400 hover:text-red-300 underline"
+            <button
+              onClick={handleCancelEstate}
+              disabled={cancelingEstate || isCvTrue(estate['triggered']?.value)}
+              className="btn-secondary w-full border border-red-900/60 text-red-300 hover:text-red-200 disabled:opacity-60"
             >
-              Cancel estate and reclaim sBTC
-            </Link>
+              {cancelingEstate ? 'Canceling estate…' : 'Cancel estate and reclaim sBTC'}
+            </button>
+            {isCvTrue(estate['triggered']?.value) && (
+              <p className="text-xs text-neutral-500 mt-2">
+                Triggered estates cannot be canceled.
+              </p>
+            )}
           </div>
         </div>
       )}

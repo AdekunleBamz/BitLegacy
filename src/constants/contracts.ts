@@ -56,11 +56,6 @@ export const X402_ASSET: X402Asset =
 
 export const X402_PRICE_MICRO = process.env.NEXT_PUBLIC_X402_PRICE_MICRO || '10000'
 
-export const X402_FACILITATOR_URL =
-  process.env.NEXT_PUBLIC_X402_FACILITATOR_URL || ''
-
-export const X402_DEMO_MODE = process.env.NEXT_PUBLIC_X402_DEMO === 'true'
-
 export const X402_PAY_TO_ADDRESS =
   process.env.NEXT_PUBLIC_X402_PAY_TO_ADDRESS || CONTRACT_ADDRESS
 

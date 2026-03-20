@@ -8,7 +8,8 @@
     "dev:raw": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify": "clarinet check && next lint && next build"
   },
   "dependencies": {
     "@stacks/connect": "^7.10.0",
