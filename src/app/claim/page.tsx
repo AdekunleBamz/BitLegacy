@@ -129,7 +129,33 @@ export default function ClaimPage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => null)
-        throw new Error(body?.error || 'x402 payment verification failed')
+        const rawError = body?.error || 'x402 payment verification failed'
+
+        if (body?.errorCode === 'INDEXING_DELAY') {
+          throw new Error(body?.hint || 'Payment received. Hiro is still indexing the transaction. Please wait and retry.')
+        }
+
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('memo mismatch')) {
+          throw new Error('Payment memo mismatch. Please retry the payment from the claim page.')
+        }
+
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('amount mismatch')) {
+          throw new Error('Payment amount mismatch. Please retry the payment with the exact quoted amount.')
+        }
+
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('recipient')) {
+          throw new Error('Payment recipient mismatch. Please retry from the claim page.')
+        }
+
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('network mismatch')) {
+          throw new Error(`Network mismatch. Make sure your wallet is on ${NETWORK}.`)
+        }
+
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('indexed')) {
+          throw new Error('Payment received. Hiro is still indexing the transaction. Please wait 15-30 seconds and retry.')
+        }
+
+        throw new Error(rawError)
       }
 
       const data = await res.json()

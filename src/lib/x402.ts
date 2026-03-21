@@ -17,8 +17,8 @@ import {
 } from '@/constants/contracts'
 
 const X402_VERSION = 2 as const
-const X402_INDEXING_RETRIES = 6
-const X402_INDEXING_DELAY_MS = 1000
+const X402_INDEXING_RETRIES = 12
+const X402_INDEXING_DELAY_MS = 1500
 
 export interface X402PaymentRequirements {
   scheme: 'exact'

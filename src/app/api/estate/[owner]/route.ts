@@ -76,9 +76,21 @@ export async function GET(
   const { valid, txid, payer, error } = await verifyX402Payment(paymentSignature, resource)
 
   if (!valid) {
+    const indexingDelay =
+      error?.toLowerCase().includes('indexed') ||
+      error?.toLowerCase().includes('hiro')
+        ? {
+            code: 'INDEXING_DELAY',
+            hint:
+              'Payment received. Hiro is still indexing the transaction. Please wait 15-30 seconds and retry.',
+          }
+        : null
+
     return NextResponse.json(
       {
         error: `Payment invalid: ${error}`,
+        errorCode: indexingDelay?.code,
+        hint: indexingDelay?.hint,
         paymentRequired,
       },
       {
